@@ -69,8 +69,23 @@ Prefer structured source data such as JSON-LD or an official API over DOM select
 
 Use, in descending confidence:
 
-1. source plus source job ID;
-2. canonical application URL;
+1. source plus source job ID (`source` + `source_job_id`);
+2. canonical application URL (`canonical_url` with tracking parameters stripped);
+
+#### Verified Source Identifiers Recorded:
+- **Greenhouse**: Numeric board job ID (e.g., `8556658002`) and requisition ID, paired with canonical board URL (`https://job-boards.greenhouse.io/{board}/jobs/{id}`).
+- **Lever**: Stable posting UUID (e.g., `ac978161-6f46-4f6b-ad9e-a258e642751c`), paired with canonical hosted URL (`https://jobs.lever.co/{company}/{id}`).
+- **JobSpy / Aggregators**:
+  - Indeed: Job Key `jk` (e.g., `indeed-998877` or hash ID) + normalized `indeed.com/viewjob` link.
+  - LinkedIn: Job ID numeric string + normalized `linkedin.com/jobs/view/{id}` link.
+  - Google Jobs: Google Job hash ID + direct URL.
+- **Manual Import / Custom Agent Tool**: Canonical URL if supplied, or a fallback hash of `(company + title)`.
+
+#### Resolution Behavior on Existing Match:
+1. **Never Duplicate**: Do not re-insert the posting or assign a new internal UUID.
+2. **Preserve User Workflow State**: If a job is already `filtered_out`, `saved`, `reviewing`, or `applied`, its review stage and application status are never overwritten by new crawl runs.
+3. **Availability & Last-Seen Refresh**: Update `last_checked_at = NOW()` and refresh `availability = 'open'`.
+4. **Content Change Detection**: Compare incoming text SHA-256 `content_hash` with stored `content_hash`. If changed, update `crawler_data` and trigger change notice without wiping prior extraction.
 
 Only source-ID or normalized-URL matches may automatically resolve to an existing posting. Similar content, title, company, or location may produce a non-destructive duplicate warning but must not automatically merge records. The MVP does not require modeling one role separately from each discovered posting.
 

@@ -19,12 +19,12 @@ Provider-specific, source-specific, and database-specific details must not leak 
 
 ## Technology constraints
 
-- TypeScript with strict compiler settings.
-- Bun for package management and scripts unless a dependency requires another runtime.
-- PostgreSQL for MVP persistence, running locally as part of the MVP environment.
-- `@google/genai` as the initial model SDK behind an adapter.
-- Runtime validation for external input, extracted data, tool parameters, and AI output.
-- Formatting, linting, type checking, unit tests, and migration tests runnable through documented commands.
+- Backend: Python (FastAPI / Uvicorn) for the ingestion engine, jobspy bridge, PostgreSQL persistence, and API services.
+- Database: PostgreSQL for MVP persistence.
+- Client / Web UI: Modern web interface (Vite + React) served for local interaction.
+- AI SDK: `@google/genai` / Google Gen AI SDK behind a provider-neutral adapter.
+- Runtime validation: Pydantic / strict runtime schemas for external input, extracted source data, and AI outputs.
+- Testing: Automated unit, integration, and contract tests runnable through documented commands.
 
 The exact web framework, PostgreSQL query/migration layer, scheduler, and validation library are implementation decisions. Select them through short architecture decisions after testing compatibility with Bun.
 

@@ -1,0 +1,6 @@
+{
+  "name": "Job Tracker Backend",
+  "description": "Local ingestion and job tracking backend engine powered by Python JobSpy CLI bridge and Express API.",
+  "permissions": [],
+  "capabilities": []
+}

@@ -31,7 +31,7 @@ The first release is a decision-support tool. It must not autonomously submit ap
 - The MVP has one user and runs on that user's computer.
 - The user owns and controls all candidate-profile and application data.
 - PostgreSQL is the system of record, running locally for the MVP.
-- The application uses TypeScript and Bun, building on patterns from `../first-agent`.
+- The application uses a Python backend (FastAPI) for ingestion, scraping with JobSpy, and PostgreSQL storage, with a lightweight web interface.
 - Gemini is the first AI provider, accessed through `@google/genai`, but domain code must not depend directly on Gemini response types.
 - Provider limits and pricing vary by model, project, and date. They must be configurable and observed at runtime; the product must not assume a fixed free-tier allowance.
 
