@@ -1,98 +1,126 @@
-# AI Job Analyzer Requirements
+# AI Job Analyzer and Intelligence Requirements
 
 ## Purpose
 
-Assess jobs that survive deterministic filtering and return a consistent, evidence-backed fit analysis. The analyzer is a bounded classification component, not an autonomous agent.
+Assess jobs that survive deterministic filtering and provide evidence-backed candidate fit, prioritized recommendations, and on-demand application assistance.
 
-## Inputs
+The architecture decouples automated screening from deep reasoning into two distinct tiers:
+1. **Tier 1 (System 1 - Automated Fit Classification):** Fast, inexpensive binary classification and confidence scoring powered by the **TypeSafe AI (JEV)** model.
+2. **Tier 2 (System 2 - Interactive Job & Application Agent):** Deep reasoning, gap analysis, cover letter drafting, and interview preparation powered by a generative LLM (Google Gemini) invoked interactively via the web interface.
 
-- normalized posting and relevant source excerpts;
-- active search profile;
-- approved candidate profile and resume information;
-- selected resume facts when needed;
-- deterministic score and unresolved questions;
-- analysis schema and prompt version.
+---
 
-Do not send unrelated personal data, application history, private notes, or secrets.
+## Tier 1: TypeSafe AI (JEV) Automated Fit Classifier
 
-## Eligibility and budgeting
+### Role & Capabilities
+- Evaluates every newly ingested posting that passes deterministic prefiltering.
+- Uses JEV's typed binary decision (`noul` primitive) to answer: *"Is this job a good fit for this candidate based on their profile, skills, and search criteria?"*
+- Returns a structured, typed response containing:
+  - `fit`: boolean (`true` | `false`);
+  - `confidence`: numeric score from `0.0` to `1.0`;
+  - execution metadata (decision latency, token/call count).
+- The returned `confidence` score is persisted with the job posting and serves as the primary automated ranking metric in the user's recommendation inbox.
 
-A job may be sent to the analyzer only when:
+### References & Documentation
+- **Guide**: [The Ultimate Guide to JEV: The New Frontier AI for Faster Decisions](https://medium.com/@unicodeveloper/the-ultimate-guide-to-jev-the-new-frontier-ai-for-faster-decisions-acd78e5f4c56)
+- **Quickstart Docs**: [TypeSafe AI Quickstart](https://docs.typesafe.ai/introduction/quickstart)
 
-- it is not closed or deterministically rejected;
-- no reusable analysis exists for the same posting content, relevant candidate-profile state, search-profile state, provider, model, and analyzer schema or prompt version;
-- it meets the configured deterministic score threshold or was manually requested;
-- the daily request and token budgets permit the call.
+*Platform Note:* New signups for the TypeSafe AI / JEV platform may be temporarily halted due to high demand. The system must implement a strict provider abstraction layer with a local/mock adapter (or lightweight LLM simulation) so the application remains fully functional and testable until account access is activated.
 
-Higher-scoring and user-requested jobs take priority when a budget is exhausted. Jobs skipped for budget reasons remain queued and visible.
+### Inputs to JEV
+To maximize JEV's confidence consistency and execution speed, JEV inputs are constructed strictly from the **normalized job summary** in our database:
+- normalized title and company;
+- normalized workplace type (`remote`, `hybrid`, `onsite`, or `unknown`);
+- normalized location;
+- normalized compensation range (or `unknown`);
+- clean, concise extracted job description summary and core skill tags;
+- candidate profile summary (skills, target roles, preferred stack, constraints).
 
-The system must obtain current quota information from provider configuration or documentation rather than encode assumptions such as "1,500 requests/day." Track observed calls and tokens locally even when the provider supplies additional enforcement.
+Raw, messy web boilerplate is never sent to JEV. Missing attributes (e.g. unknown salary or location) are passed explicitly as unknowns. The system monitors how missing attributes influence JEV's confidence scores over time to calibrate thresholds.
 
-## Structured output
+---
 
-The model response must be validated against a versioned schema containing at least:
+## Tier 2: Interactive Conversational Job Agent (Generative LLM)
 
-- overall fit score from 0 to 100;
-- recommendation: `recommend`, `consider`, or `reject`;
-- confidence from 0 to 1;
-- matched qualifications with evidence;
-- qualification gaps with requirement importance and evidence;
-- compensation assessment: meets, below, unknown, or ambiguous;
-- location/workplace assessment;
-- seniority assessment;
-- authorization/sponsorship assessment;
-- concerns or contradictions;
-- facts requiring user verification;
-- concise rationale;
-- optional suggested resume focus areas, without fabricating experience.
+### Role & Capabilities
+- User-directed and interactive: Invoked on-demand through the web application frontend or local CLI for deep reasoning and application assistance.
+- Multi-turn conversational interface powered by Google Gemini (`@google/genai`) using the modern Interactions API.
+- Fluid, multi-job conversations: Conversations are not artificially siloed to a single `job_id`. A user can explore multiple jobs, ask comparative questions ("Compare Job A and Job B for compensation and tech stack"), request cover letters, and practice interview questions within the same thread.
+- Dynamic Job Tagging: Conversations maintain a `job_ids: string[]` tag list. Whenever a job is retrieved, analyzed, or targeted by an agent tool, the job's ID is automatically tagged to the conversation. This allows the UI to easily filter and surface "Conversations referencing this job" while preserving total conversational freedom.
+- Rehydration: Opening or resuming an existing conversation rehydrates the full ordered message history, providing instant context to the model.
 
-Each factual conclusion must reference a provided excerpt or be marked as an inference/unknown. The model must not infer protected characteristics or rank based on them.
+### Tool Architecture (Function Calling)
+- Adopts a provider-agnostic `Tool` interface declaring plain JSON Schema parameters (directly accepted by the Gemini API without extra runtime transformation layers).
+- Autonomous Tool Loop: The agent runs multi-turn tool loops:
+  1. Detects `function_call` steps from the model;
+  2. Executes matching tools and formats results as `function_result` steps;
+  3. Feeds results back using `previous_interaction_id` until the model produces its final text turn;
+  4. Bounded by a safety cap (`MAX_TOOL_TURNS = 5`) and returns `is_error: true` on exceptions so the model can explain and recover gracefully.
+- Core Pre-Defined Tools:
+  1. `get_job_details`: Fetches full normalized job profile and requirements by `job_id` or query.
+  2. `analyze_qualification_fit`: Produces structured match/gap breakdown citing exact evidence from job text.
+  3. `draft_cover_letter`: Generates tailored, truthful cover letters grounded in candidate skills, with user focus notes.
+  4. `generate_interview_prep`: Produces role-specific technical questions, architecture tradeoffs, and prep topics.
+  5. `search_saved_jobs`: Searches stored database jobs by keyword, company, compensation floor, or workplace type.
 
-Invalid responses may be repaired once using a constrained retry. Persistent failure must be stored as an analysis error and must not invent a default recommendation.
+### Local Testing & Developer Ergonomics
+- Interactive Terminal REPL (`src/scripts/chat.ts` / `npm run agent:chat`): Allows developers to chat directly in the terminal with live streaming/turns, tool execution feedback, `/history`, and `/exit` commands before a full web UI is built.
+- REST Endpoints (`/api/agent/conversations`, `/api/agent/conversations/:id/message`): Standard endpoints for `curl` testing and web frontend chat windows.
 
-## Scoring policy
+---
 
-- Hard constraints remain deterministic and must not be overridden silently by the model.
-- The AI score complements rather than replaces the deterministic score.
-- Final ranking must keep deterministic and AI component scores distinguishable.
-- Unknown information reduces confidence rather than automatically becoming a mismatch.
-- The user can inspect and override all scores.
+## Eligibility and Budgeting
 
-## Prompt-injection resistance
+### Tier 1 (Automated JEV Screening):
+- Runs automatically in the background for all newly ingested postings that pass the deterministic hard filter.
+- Because JEV is purpose-built for low latency and minimal cost, deterministic score gating is not required.
+- Tracks daily request counts and respects configured rate limits.
 
-- Delimit posting content as untrusted data.
-- Instruct the analyzer to classify content only and ignore instructions embedded in it.
-- Give the analyzer no write, browser, shell, messaging, or application-submission tools.
-- Validate all output independently of model text.
-- Limit input length and strip irrelevant scripts, navigation, and repeated boilerplate.
+### Tier 2 (Interactive Agent):
+- Executed on-demand when the user clicks an action in the UI (e.g., "Analyze Fit", "Draft Cover Letter", "Prep Interview").
+- Governed by daily request/token budgets and rate limits.
+- If daily interactive budget is reached, user is notified and pending requests queue until reset.
 
-## Provider abstraction
+---
 
-The analyzer must expose a provider-neutral application boundary so the rest of the product is not coupled to Gemini request or response types.
+## Scoring and Ranking Policy
 
-The Gemini implementation should use schema-constrained structured output where supported. Store provider, model, prompt/schema versions, latency, and available usage metadata with each result.
+1. **No Artificial Deterministic Score:**
+   - The system does not compute a composite `deterministic_score`. Hard constraints are binary gates (`pass` / `fail`).
+2. **Confidence-Driven Ranking:**
+   - Jobs in the recommendation inbox are ranked by JEV `confidence` score (e.g., descending order of confidence among `fit = true` postings).
+   - Postings where JEV returned `fit = false` or low confidence are deprioritized or grouped into a secondary review view.
+3. **Handling of Missing / Null Fields:**
+   - Missing fields (salary, location, workplace) remain `NULL` in the database and are treated as unknowns.
+   - Unknown information is evaluated by JEV rather than penalized arbitrarily.
+4. **User Override:**
+   - The user can inspect JEV's fit outcome and confidence score and manually adjust the job's workflow status (`saved`, `reviewing`, `dismissed`).
 
-The reusable ideas from `../first-agent` are the provider wrapper and tool abstraction. Do not copy its mutable chat history into batch analysis: each job analysis should be stateless and reproducible from explicit inputs.
+---
 
-## Evaluation
+## Provider Abstraction
 
-Maintain a sanitized fixture set containing clear matches, clear rejections, ambiguous postings, missing salary, misleading boilerplate, and prompt-injection text.
+The analyzer must expose a provider-neutral boundary:
+- **`FitClassifier` Interface**: Abstracts the TypeSafe AI (JEV) client. Allows transparent swapping between the live TypeSafe AI API, a fallback simulated classifier, and local unit test fixtures.
+- **`GenerativeAgent` Interface**: Abstracts Google Gen AI SDK (`@google/genai`) for interactive drafting and chat-based role assistance.
 
-Before changing prompts, models, schemas, or scoring policy, compare:
+Both providers record latency, model ID, prompt/template version, and usage metadata.
 
-- structured-output validity;
-- agreement with expected hard outcomes;
-- false-negative rate on plausible jobs;
-- evidence correctness;
-- average calls, tokens, latency, and estimated cost.
+---
 
-Prefer avoiding false negatives in the deterministic funnel; a user can dismiss an extra candidate more easily than recover an unseen job.
+## Prompt-Injection Resistance
 
-## Acceptance criteria
+- Delimit job posting text strictly as untrusted input data.
+- Instruct models to evaluate content only and disregard any instructions contained within postings.
+- Grant no execution, file system modification, or network submission tools to the evaluation pipelines.
+- Validate all structured outputs against strict Pydantic / TypeScript schemas.
 
-- Matching posting content, relevant profile state, provider, model, and analyzer schema or prompt version reuse the stored result.
-- Output that fails schema validation is never treated as a valid recommendation.
-- Every displayed gap or match includes evidence or an explicit inference marker.
-- Analyzer operation can be disabled without disabling ingestion and tracking.
-- Before historical comparison or learned ranking is implemented, the candidate and search profile state used for an analysis is reproducible through a snapshot, hash, or version reference.
-- A posting containing hostile instructions cannot cause tool execution or policy changes.
+---
+
+## Acceptance Criteria
+
+- All postings passing deterministic prefiltering receive automated JEV fit classification and confidence scoring.
+- JEV confidence score is persisted and available for sorting in the inbox.
+- System operates cleanly with mock/fallback classifier when live JEV credentials are not yet provisioned.
+- Interactive deep analysis and cover letter drafting can be triggered from the frontend for individual jobs.
+- Postings with missing attributes (salary `NULL`, location `NULL`) are processed without error and without artificial penalties.

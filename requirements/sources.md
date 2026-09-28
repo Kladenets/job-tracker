@@ -107,10 +107,15 @@ Curated, category-specific syndication feeds.
 1. **Deduplication:**
    - Primary: Match on `source` + `source_job_id`.
    - Secondary: Match on normalized canonical application URL (stripping UTM and tracking query parameters).
+   - Verification Requirement: Verify that canonical URLs across sources accurately identify duplicate jobs, and test deduplication between aggregator wrappers and direct ATS links.
    - Flagging: Flag similar title + company pairs as potential cross-postings without destructive automated merging.
 
-2. **Durable Ingestion Log:**
+2. **Actionable Application URLs:**
+   - Sources must capture direct application portal links (`job_url_direct`) whenever available to facilitate direct 1-click applying.
+   - Retain both `source_url` and direct `application_url`.
+
+3. **Durable Ingestion Log:**
    - Every discovery run must log: `run_id`, `source`, `started_at`, `completed_at`, `status` (success/partial/failed), `jobs_discovered_count`, `jobs_new_count`, `jobs_duplicate_count`, and raw error output if any.
 
-3. **Storage Pipeline Hand-Off:**
+4. **Storage Pipeline Hand-Off:**
    - Raw postings from all sources normalize into a common schema before reaching the deterministic filtering stage and database persistence.

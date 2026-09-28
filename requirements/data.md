@@ -32,15 +32,21 @@ The job posting is the central record and must have a durable internal ID.
 It must retain these stable values when available:
 
 - source name and source-specific posting ID;
-- source, canonical, and application URLs;
+- source, canonical, and direct actionable application URLs;
 - title and company as presented by the source;
 - extracted description text and a content hash;
 - posting and discovery dates;
 - last fetch and availability-check dates;
 - current posting availability;
 - current job-review status;
-- crawler and AI scores when produced;
+- JEV automated fit classification (`jev_fit` boolean), confidence score (`jev_confidence` 0.0-1.0), and decision metadata;
+- relational nullable columns for frequently filtered attributes (`location`, `workplace_type`, `salary_min`, `salary_max`, `currency`);
 - created and updated timestamps.
+
+#### Missing Fields and Nullability Policy
+- Missing attributes (e.g. unknown salary, unlisted location, unspecified workplace type) must be stored as `NULL` in relational fields, representing genuine unknowns.
+- No artificial `is_incomplete` flag is stored; queries and UI filters use standard SQL `IS NULL` / `IS NOT NULL` checks.
+- Missing attributes must not trigger automatic filtering exclusions or negative assumptions.
 
 #### Crawler data
 
@@ -53,31 +59,34 @@ The posting must retain a versioned crawler document containing first-pass extra
 - technologies and keywords;
 - work-authorization or sponsorship language;
 - equity, parental leave, and other detected benefits;
-- rules or terms matched and their supporting excerpts;
+- deterministic filter rules evaluated and supporting evidence excerpts (for filtered-out postings);
 - extraction confidence or unknown state where useful.
 
 The crawler document is deliberately extensible. Adding an experimental extracted field must not require a relational schema change.
 
-#### AI analysis data
+#### AI intelligence data
 
-The posting must separately retain a versioned AI-analysis document. Expected findings include:
+The posting retains versioned AI intelligence data across two tiers:
 
-- recommendation and confidence;
-- verification or correction of crawler findings;
-- required and preferred qualifications;
-- responsibilities;
-- benefits not captured by the crawler;
-- matched candidate experience;
-- gaps, concerns, and unknowns;
-- concise recommendation rationale and supporting evidence.
+1. **JEV System-1 Fit Data (Automated Screening):**
+   - `fit`: boolean recommendation;
+   - `confidence`: numeric score from 0.0 to 1.0;
+   - model version, execution latency, and normalized input snapshot hash.
 
-The posting must also identify the analyzer provider, model, schema or prompt version, analysis time, relevant candidate/search-profile state or hashes, and usage metadata needed for correct result reuse, troubleshooting, and budget reporting.
+2. **Interactive Agent Data (System-2 On-Demand Assistance):**
+   - detailed qualification match and gap breakdown;
+   - resume focus suggestions;
+   - generated cover letter drafts and revisions;
+   - interview and technical preparation notes;
+   - model ID, prompt version, and token usage metadata.
 
-The MVP may retain only the current analysis. When explicit feedback is recorded, it must capture enough of the recommendation context—at minimum its result, score, model, and analyzer version—to preserve what the user rated. Complete historical analysis records become required before model comparisons or learned ranking are implemented.
+The MVP retains the latest automated JEV evaluation and any user-initiated agent artifacts.
 
 #### Deduplication
 
 The system must prevent obvious duplicate postings using source ID and normalized URLs when available. Only those strong identifiers may automatically resolve to an existing posting. Similar title, company, location, or content may produce a duplicate warning but must not cause an automatic merge in the MVP.
+
+<!-- Verification Requirement: Verify that canonical URLs saved across sources accurately identify duplicate jobs (including aggregator wrappers vs direct ATS links), and add test cases validating canonical URL normalization across edge cases. -->
 
 ### Job status
 
@@ -146,6 +155,26 @@ The MVP must support an explicit upvote or downvote on a job, with an optional r
 
 Saving, dismissing, and applying are workflow events, not implicit votes. Future learning may use them as behavioral signals, but they must remain distinguishable from explicit preference feedback.
 
+### Agent conversation and message history
+
+The MVP supports multi-turn interactive conversational sessions between the user and the Tier 2 AI Agent.
+
+Conversations are not rigidly bound 1-to-1 with a single job posting. Instead, conversations maintain a dynamic list of tagged `job_ids: string[]`. Whenever an agent tool retrieves, analyzes, or drafts content for a specific job, that job's ID is automatically appended to the conversation's tagged `job_ids`. This preserves conversational fluidity (allowing comparative discussions across multiple jobs) while enabling the UI to index and filter conversations by referenced jobs.
+
+Each conversation entity retains:
+- `id`: UUID primary key;
+- `title`: human-readable title (auto-generated from first turn or user-editable);
+- `job_ids`: array of referenced job posting UUIDs;
+- `created_at` and `updated_at`: timestamps;
+- `messages`: ordered message history:
+  - `id`: message UUID;
+  - `role`: `'system'` | `'user'` | `'assistant'`;
+  - `content`: text of the message turn;
+  - `tool_calls`: optional array of tool executions `{ name, call_id, arguments, result, is_error }`;
+  - `created_at`: message timestamp.
+
+Conversations are persisted in the PostgreSQL database (`conversations` and `conversation_messages` tables, or `conversations` with a `jsonb` messages array) and in the local disk store (`./data/conversations_store.json`).
+
 ### Candidate profile
 
 The candidate profile must retain the approved information needed to assess jobs and draft truthful application content, including resume content, skills, experience, work preferences, location constraints, and work authorization where supplied.
@@ -154,9 +183,43 @@ The MVP may store this as a versioned, validated JSON document. Before historica
 
 ### Search profile
 
-A search profile defines crawler terms, title aliases, exclusions, compensation and location constraints, preference weights, and thresholds for AI analysis.
+A search profile defines discovery queries, title aliases, deterministic qualification rules, compensation thresholds, location/workplace preferences, and candidate summary context used for JEV automated screening.
 
-The MVP may store this as a versioned, validated JSON document. The active profile must be identifiable, and the profile state or hash used for an analysis must be retained before reproducible evaluation or learned ranking is implemented.
+The MVP stores this as an externalized configuration document (e.g., `config/search_profile.json` or dedicated relational table `search_profiles` with JSON settings).
+
+Expected search profile configuration:
+- `id`: UUID and human-readable profile name (e.g., "Full-Stack Remote & Local Hybrid").
+- `is_active`: boolean indicator of current active search profile.
+- `discovery`:
+  - `search_terms`: string array (e.g., `["Software Engineer", "Full Stack Engineer", "Frontend Engineer"]`).
+  - `target_locations`: array of `{ location: "Doylestown, PA", radius_miles: 35 }`.
+- `deterministic_filter_rules`:
+  - `title`:
+    - `target_titles`: string array with aliases.
+    - `excluded_titles`: string array (e.g., `["intern", "unpaid", "director", "vp", "sales representative"]`).
+  - `workplace`:
+    - `allowed_types`: `["remote", "hybrid", "onsite", "unknown"]`.
+    - `max_onsite_days_per_week`: number (e.g., 2 for hybrid tolerance).
+    - `commute_radius_miles`: number (with built-in buffer, e.g., 35 miles + 15 miles buffer).
+    - `missing_workplace_policy`: `allow` (retained as null, eligible for review).
+  - `compensation`:
+    - `min_salary_annual`: target minimum (e.g., $120,000).
+    - `tolerance_percentage`: percentage below target before hard exclusion (e.g., 10%–15% tolerance window).
+    - `missing_salary_policy`: `allow` (retained as null, never excluded).
+  - `posting_age`:
+    - `max_age_days`: maximum allowable posting age (e.g., 45 or 60 days).
+  - `seniority`:
+    - `preferred_levels`: `["mid", "senior", "lead", "unknown"]`.
+    - `excluded_levels`: `["intern", "student", "director", "executive"]`.
+  - `work_authorization`:
+    - `requires_sponsorship`: boolean.
+    - `exclude_us_citizenship_only`: boolean.
+  - `companies`:
+    - `excluded_companies`: string array (including blacklisted employers and staffing agencies).
+- `jev_screening`:
+  - `enabled`: boolean.
+  - `min_confidence_recommend`: threshold confidence to highlight in inbox (e.g. >= 0.70).
+  - `candidate_summary_key`: reference to active candidate profile snapshot.
 
 ### Crawl run
 
@@ -180,7 +243,15 @@ If crawling and analysis run asynchronously, queued work must survive applicatio
 - Enforce referential integrity and important uniqueness constraints in the database.
 - Use transactions for status changes and other multi-record operations.
 - Use `jsonb` for flexible documents that need to be queried.
-- Add relational or JSON-path indexes only for demonstrated product queries; initial indexes must cover source identity, normalized URL, job status, application status, discovery date, and queued-work scheduling.
+- Add relational or JSON-path indexes for demonstrated product queries; initial indexes must cover:
+  - source identity (`source`, `source_job_id`);
+  - canonical URL (`canonical_url`);
+  - job review status (`job_status`);
+  - JEV fit confidence (`jev_confidence`);
+  - application status (`application_status`);
+  - discovery date (`discovered_at`);
+  - frequently queried nullable filter fields (`location`, `workplace_type`, `salary_min`) to optimize filtering and missing-data queries (`WHERE salary_min IS NULL`, etc.);
+  - queued-work scheduling and status.
 - Provide documented backup, restore, and machine-readable export procedures.
 - Integration tests must run against an isolated PostgreSQL database rather than a different in-memory database engine.
 

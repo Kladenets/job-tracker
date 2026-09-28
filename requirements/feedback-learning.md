@@ -43,7 +43,7 @@ Potential features:
 - title and skill overlap;
 - compensation and location compatibility;
 - seniority distance;
-- deterministic and AI component scores;
+- JEV confidence score and rule evaluation history;
 - company/industry preferences;
 - embedding similarity between posting and liked jobs;
 - explicit reason-code history.

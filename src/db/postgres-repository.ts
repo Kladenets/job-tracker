@@ -1,6 +1,7 @@
 import { Pool } from "pg";
-import { UnifiedJobPosting, UnifiedJobPostingSchema } from "../types/job-posting";
+import { UnifiedJobPosting } from "../types/job-posting";
 import { JobPostingRepository, ExistingJobMatch } from "./repository-interface";
+import { Conversation, StoredConversation } from "../ai/agent/conversation";
 
 export class PostgresJobRepository implements JobPostingRepository {
   constructor(private pool: Pool) {}
@@ -53,7 +54,7 @@ export class PostgresJobRepository implements JobPostingRepository {
         salary_min_annual, salary_max_annual, currency, interval, raw_salary_text,
         description_text, date_posted, date_discovered, last_checked_at,
         job_status, availability, availability_evidence,
-        deterministic_score, ai_score,
+        jev_fit, jev_confidence,
         crawler_data, ai_analysis, user_overrides,
         created_at, updated_at
       ) VALUES (
@@ -70,6 +71,8 @@ export class PostgresJobRepository implements JobPostingRepository {
         last_checked_at = EXCLUDED.last_checked_at,
         availability = EXCLUDED.availability,
         availability_evidence = EXCLUDED.availability_evidence,
+        jev_fit = COALESCE(EXCLUDED.jev_fit, job_postings.jev_fit),
+        jev_confidence = COALESCE(EXCLUDED.jev_confidence, job_postings.jev_confidence),
         crawler_data = EXCLUDED.crawler_data,
         updated_at = NOW()
       RETURNING *;
@@ -106,8 +109,8 @@ export class PostgresJobRepository implements JobPostingRepository {
       posting.availability,
       posting.availability_evidence || null,
 
-      posting.deterministic_score || null,
-      posting.ai_score || null,
+      posting.jev_fit != null ? posting.jev_fit : null,
+      posting.jev_confidence != null ? posting.jev_confidence : null,
 
       posting.crawler_data ? JSON.stringify(posting.crawler_data) : null,
       posting.ai_analysis ? JSON.stringify(posting.ai_analysis) : null,
@@ -128,6 +131,36 @@ export class PostgresJobRepository implements JobPostingRepository {
        WHERE id = $3`,
       [availability, evidence || null, id]
     );
+  }
+
+  async updatePostingContent(
+    id: string,
+    updates: {
+      description_text?: string;
+      content_hash: string;
+      crawler_data?: any;
+      availability?: string;
+    }
+  ): Promise<void> {
+    const setParts: string[] = ["content_hash = $2", "last_checked_at = NOW()", "updated_at = NOW()"];
+    const params: unknown[] = [id, updates.content_hash];
+    let pIdx = 3;
+
+    if (updates.description_text) {
+      setParts.push(`description_text = $${pIdx++}`);
+      params.push(updates.description_text);
+    }
+    if (updates.crawler_data) {
+      setParts.push(`crawler_data = $${pIdx++}`);
+      params.push(JSON.stringify(updates.crawler_data));
+    }
+    if (updates.availability) {
+      setParts.push(`availability = $${pIdx++}`);
+      params.push(updates.availability);
+    }
+
+    const query = `UPDATE job_postings SET ${setParts.join(", ")} WHERE id = $1`;
+    await this.pool.query(query, params);
   }
 
   async updateStatus(id: string, newStatus: string, changedBy: string, reason?: string): Promise<void> {
@@ -168,6 +201,10 @@ export class PostgresJobRepository implements JobPostingRepository {
     jobStatus?: string;
     availability?: string;
     company?: string;
+    missingSalary?: boolean;
+    missingLocation?: boolean;
+    sortBy?: "created_at" | "jev_confidence";
+    sortOrder?: "asc" | "desc";
     limit?: number;
     offset?: number;
   }): Promise<UnifiedJobPosting[]> {
@@ -190,14 +227,28 @@ export class PostgresJobRepository implements JobPostingRepository {
       params.push(`%${filters.company}%`);
     }
 
+    if (filters?.missingSalary === true) {
+      conditions.push(`salary_min_annual IS NULL AND salary_max_annual IS NULL`);
+    }
+
+    if (filters?.missingLocation === true) {
+      conditions.push(`location IS NULL`);
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const limit = filters?.limit || 50;
     const offset = filters?.offset || 0;
 
+    let orderCol = "created_at";
+    if (filters?.sortBy === "jev_confidence") {
+      orderCol = "jev_confidence";
+    }
+    const orderDir = filters?.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
+
     const query = `
       SELECT * FROM job_postings
       ${whereClause}
-      ORDER BY created_at DESC
+      ORDER BY ${orderCol} ${orderDir} NULLS LAST
       LIMIT ${limit} OFFSET ${offset};
     `;
 
@@ -238,8 +289,8 @@ export class PostgresJobRepository implements JobPostingRepository {
       availability: row.availability,
       availability_evidence: row.availability_evidence,
 
-      deterministic_score: row.deterministic_score != null ? parseFloat(row.deterministic_score) : null,
-      ai_score: row.ai_score != null ? parseFloat(row.ai_score) : null,
+      jev_fit: row.jev_fit != null ? Boolean(row.jev_fit) : null,
+      jev_confidence: row.jev_confidence != null ? parseFloat(row.jev_confidence) : null,
 
       crawler_data: row.crawler_data || undefined,
       ai_analysis: row.ai_analysis || null,
@@ -247,6 +298,239 @@ export class PostgresJobRepository implements JobPostingRepository {
 
       created_at: new Date(row.created_at).toISOString(),
       updated_at: new Date(row.updated_at).toISOString(),
+    };
+  }
+
+  async saveConversation(conversation: Conversation): Promise<Conversation> {
+    const json = conversation.toJSON();
+    const query = `
+      INSERT INTO conversations (id, title, job_ids, messages, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (id) DO UPDATE SET
+        title = EXCLUDED.title,
+        job_ids = EXCLUDED.job_ids,
+        messages = EXCLUDED.messages,
+        updated_at = NOW()
+      RETURNING *;
+    `;
+    await this.pool.query(query, [
+      json.id,
+      json.title,
+      JSON.stringify(json.job_ids),
+      JSON.stringify(json.messages),
+      json.created_at,
+      json.updated_at,
+    ]);
+    return conversation;
+  }
+
+  async getConversation(id: string): Promise<Conversation | null> {
+    const res = await this.pool.query("SELECT * FROM conversations WHERE id = $1", [id]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return Conversation.fromJSON({
+      id: row.id,
+      title: row.title,
+      job_ids: Array.isArray(row.job_ids) ? row.job_ids : JSON.parse(row.job_ids || "[]"),
+      messages: Array.isArray(row.messages) ? row.messages : JSON.parse(row.messages || "[]"),
+      created_at: new Date(row.created_at).toISOString(),
+      updated_at: new Date(row.updated_at).toISOString(),
+    });
+  }
+
+  async listConversations(filter?: { jobId?: string; limit?: number }): Promise<Conversation[]> {
+    let query = "SELECT * FROM conversations";
+    const params: unknown[] = [];
+
+    if (filter?.jobId) {
+      query += " WHERE job_ids @> $1::jsonb";
+      params.push(JSON.stringify([filter.jobId]));
+    }
+
+    query += " ORDER BY updated_at DESC";
+
+    if (filter?.limit) {
+      query += ` LIMIT $${params.length + 1}`;
+      params.push(filter.limit);
+    }
+
+    const res = await this.pool.query(query, params);
+    return res.rows.map((row) =>
+      Conversation.fromJSON({
+        id: row.id,
+        title: row.title,
+        job_ids: Array.isArray(row.job_ids) ? row.job_ids : JSON.parse(row.job_ids || "[]"),
+        messages: Array.isArray(row.messages) ? row.messages : JSON.parse(row.messages || "[]"),
+        created_at: new Date(row.created_at).toISOString(),
+        updated_at: new Date(row.updated_at).toISOString(),
+      })
+    );
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    await this.pool.query("DELETE FROM conversations WHERE id = $1", [id]);
+  }
+
+  // Application Tracking Methods
+  async saveApplication(app: any): Promise<any> {
+    const query = `
+      INSERT INTO applications (
+        id, job_posting_id, status, application_url, applied_at, next_action_date, user_notes, stage_history, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+      )
+      ON CONFLICT (job_posting_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        application_url = EXCLUDED.application_url,
+        applied_at = EXCLUDED.applied_at,
+        next_action_date = EXCLUDED.next_action_date,
+        user_notes = EXCLUDED.user_notes,
+        stage_history = EXCLUDED.stage_history,
+        updated_at = NOW()
+      RETURNING *;
+    `;
+    const res = await this.pool.query(query, [
+      app.id,
+      app.job_posting_id,
+      app.status || "preparing",
+      app.application_url || null,
+      app.applied_at ? new Date(app.applied_at) : null,
+      app.next_action_date ? new Date(app.next_action_date) : null,
+      app.user_notes || null,
+      JSON.stringify(app.stage_history || []),
+    ]);
+    return res.rows[0];
+  }
+
+  async getApplication(id: string): Promise<any | null> {
+    const res = await this.pool.query("SELECT * FROM applications WHERE id = $1", [id]);
+    return res.rows[0] || null;
+  }
+
+  async getApplicationByJobId(jobId: string): Promise<any | null> {
+    const res = await this.pool.query("SELECT * FROM applications WHERE job_posting_id = $1", [jobId]);
+    return res.rows[0] || null;
+  }
+
+  async listApplications(filter?: { status?: string }): Promise<any[]> {
+    let query = `
+      SELECT a.*, 
+             j.title, j.company, j.location, j.workplace_type, j.salary_min_annual, j.salary_max_annual, j.canonical_url, j.application_url as job_application_url
+      FROM applications a
+      LEFT JOIN job_postings j ON a.job_posting_id = j.id
+    `;
+    const params: unknown[] = [];
+    if (filter?.status) {
+      query += " WHERE a.status = $1";
+      params.push(filter.status);
+    }
+    query += " ORDER BY a.updated_at DESC";
+    const res = await this.pool.query(query, params);
+    return res.rows.map((row) => ({
+      id: row.id,
+      job_posting_id: row.job_posting_id,
+      status: row.status,
+      application_url: row.application_url,
+      applied_at: row.applied_at ? new Date(row.applied_at).toISOString() : null,
+      next_action_date: row.next_action_date ? new Date(row.next_action_date).toISOString() : null,
+      user_notes: row.user_notes,
+      stage_history: Array.isArray(row.stage_history) ? row.stage_history : JSON.parse(row.stage_history || "[]"),
+      created_at: new Date(row.created_at).toISOString(),
+      updated_at: new Date(row.updated_at).toISOString(),
+      job: {
+        id: row.job_posting_id,
+        title: row.title,
+        company: row.company,
+        location: row.location,
+        workplace_type: row.workplace_type,
+        salary_min_annual: row.salary_min_annual,
+        salary_max_annual: row.salary_max_annual,
+        canonical_url: row.canonical_url,
+        application_url: row.job_application_url,
+      },
+    }));
+  }
+
+  async deleteApplication(id: string): Promise<void> {
+    await this.pool.query("DELETE FROM applications WHERE id = $1", [id]);
+  }
+
+  // Discovery Run & Metrics Querying
+  async getMetrics(options?: { startDate?: string; endDate?: string }): Promise<any> {
+    const postRes = await this.pool.query("SELECT id, source, job_status, jev_fit, date_discovered, created_at FROM job_postings");
+    const appRes = await this.pool.query("SELECT id, status, applied_at, created_at FROM applications");
+
+    const start = options?.startDate ? new Date(options.startDate).getTime() : 0;
+    const end = options?.endDate ? new Date(options.endDate).getTime() : Date.now();
+
+    const filteredPostings = postRes.rows.filter((p: any) => {
+      const t = new Date(p.date_discovered || p.created_at).getTime();
+      return t >= start && t <= end;
+    });
+
+    const filteredApps = appRes.rows.filter((a: any) => {
+      const t = new Date(a.applied_at || a.created_at).getTime();
+      return t >= start && t <= end;
+    });
+
+    const discoveredCount = filteredPostings.length;
+    const filteredOutCount = filteredPostings.filter((p: any) => p.job_status === "filtered_out").length;
+    const recommendedCount = filteredPostings.filter((p: any) => p.job_status === "recommended" || p.jev_fit === true).length;
+    const savedCount = filteredPostings.filter((p: any) => p.job_status === "saved" || p.job_status === "reviewing").length;
+    const dismissedCount = filteredPostings.filter((p: any) => p.job_status === "dismissed").length;
+
+    const appliedCount = filteredApps.length;
+    const recruiterScreenCount = filteredApps.filter((a: any) =>
+      ["recruiter_screen", "interviewing", "assessment", "offer", "accepted"].includes(a.status)
+    ).length;
+    const interviewCount = filteredApps.filter((a: any) =>
+      ["interviewing", "assessment", "offer", "accepted"].includes(a.status)
+    ).length;
+    const offerCount = filteredApps.filter((a: any) => ["offer", "accepted"].includes(a.status)).length;
+    const rejectedCount = filteredApps.filter((a: any) => a.status === "rejected").length;
+
+    const recruiterScreenRate = appliedCount > 0 ? Math.round((recruiterScreenCount / appliedCount) * 100) : 0;
+    const interviewRate = appliedCount > 0 ? Math.round((interviewCount / appliedCount) * 100) : 0;
+    const offerRate = appliedCount > 0 ? Math.round((offerCount / appliedCount) * 100) : 0;
+    const rejectionRate = appliedCount > 0 ? Math.round((rejectedCount / appliedCount) * 100) : 0;
+
+    const sources: Record<string, { discovered: number; recommended: number; applied: number }> = {};
+    for (const p of filteredPostings) {
+      if (!sources[p.source]) {
+        sources[p.source] = { discovered: 0, recommended: 0, applied: 0 };
+      }
+      sources[p.source].discovered += 1;
+      if (p.job_status === "recommended" || p.jev_fit === true) {
+        sources[p.source].recommended += 1;
+      }
+    }
+
+    return {
+      dateRange: {
+        startDate: options?.startDate || null,
+        endDate: options?.endDate || null,
+      },
+      funnel: {
+        discoveredCount,
+        filteredOutCount,
+        recommendedCount,
+        savedCount,
+        dismissedCount,
+      },
+      applications: {
+        appliedCount,
+        recruiterScreenCount,
+        interviewCount,
+        offerCount,
+        rejectedCount,
+        recruiterScreenRate,
+        interviewRate,
+        offerRate,
+        rejectionRate,
+        isSmallSample: appliedCount < 10,
+        sampleSizeWarning: appliedCount < 10 ? "Early signal: N < 10 applications" : null,
+      },
+      sources,
     };
   }
 }

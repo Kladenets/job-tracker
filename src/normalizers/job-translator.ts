@@ -119,8 +119,8 @@ export function translateRawJobPosting(raw: RawJobPosting): UnifiedJobPosting {
     availability: "open",
     availability_evidence: "Discovered during ingestion run",
 
-    deterministic_score: null,
-    ai_score: null,
+    jev_fit: null,
+    jev_confidence: null,
 
     crawler_data: crawlerData,
     ai_analysis: null,

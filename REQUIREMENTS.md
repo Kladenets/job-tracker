@@ -23,15 +23,15 @@ The first release is a decision-support tool. It must not autonomously submit ap
 - Automatically answering demographic, legal, compensation, or attestation questions.
 - Training or fine-tuning a custom machine-learning model.
 - Recording interviews or meetings.
-- Multi-user accounts, cloud hosting, or cross-device synchronization.
+- Multi-user public registration or multi-tenant billing (the app is private single-user).
 - Guaranteeing that a posting or extracted fact is accurate or current.
 
 ## 4. Users and operating assumptions
 
-- The MVP has one user and runs on that user's computer.
+- The MVP has one user and can run locally on that user's computer or hosted privately as a serverless container (Google Cloud Run behind Cloudflare Access; see `requirements/auth.md`).
 - The user owns and controls all candidate-profile and application data.
-- PostgreSQL is the system of record, running locally for the MVP.
-- The application uses a Python backend (FastAPI) for ingestion, scraping with JobSpy, and PostgreSQL storage, with a lightweight web interface.
+- PostgreSQL is the system of record (running locally or via managed database like Supabase/Neon).
+- The application uses a unified backend architecture for ingestion, scraping with JobSpy, and PostgreSQL storage, with an interactive web interface.
 - Gemini is the first AI provider, accessed through `@google/genai`, but domain code must not depend directly on Gemini response types.
 - Provider limits and pricing vary by model, project, and date. They must be configurable and observed at runtime; the product must not assume a fixed free-tier allowance.
 
@@ -183,9 +183,9 @@ The MVP is complete when the user can:
 
 - Provider abstraction, structured job analysis, prompt/version tracking, budgets, and evaluation fixtures.
 
-### Phase 4: assistance and dashboard
+### Phase 4: assistance, dashboard, and private access
 
-- Draft-only application agent, review queue, metrics, exports, and operational controls.
+- Draft-only application agent, review queue, metrics, exports, private serverless deployment (Cloud Run), and zero-trust perimeter controls (`requirements/auth.md`).
 
 ### Later
 

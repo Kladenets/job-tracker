@@ -41,6 +41,7 @@ Extract, when present:
 
 - source job ID;
 - canonical and source URLs;
+- direct actionable application URL (`job_url_direct` or direct ATS application portal link);
 - title and company;
 - full description and plain text;
 - date posted and application deadline;
@@ -57,6 +58,12 @@ Each extracted field must retain one of: explicit value, inferred value with evi
 
 Prefer structured source data such as JSON-LD or an official API over DOM selectors. Source-specific selectors must be isolated in the adapter.
 
+#### Actionable Application Links:
+- Ingested postings must retain a directly actionable `application_url` in addition to the `source_url`.
+- For aggregators (e.g., Indeed, Google Jobs), the crawler captures `job_url_direct` when present, which resolves to the employer's direct ATS (Greenhouse, Lever, Workday, etc.), enabling the user to directly click and apply.
+- If a direct ATS URL is unavailable, `application_url` defaults to the verified posting URL where the application can be submitted.
+- The `application` entity also retains its own `application_url` for post-submission tracking.
+
 ### Normalization
 
 - Normalize URLs by removing known tracking parameters while retaining the original URL.
@@ -71,6 +78,8 @@ Use, in descending confidence:
 
 1. source plus source job ID (`source` + `source_job_id`);
 2. canonical application URL (`canonical_url` with tracking parameters stripped);
+
+<!-- Verification Requirement: Verify that canonical URLs saved across sources accurately identify duplicate jobs (including aggregator wrappers vs direct ATS links), and add test cases validating canonical URL normalization across edge cases. -->
 
 #### Verified Source Identifiers Recorded:
 - **Greenhouse**: Numeric board job ID (e.g., `8556658002`) and requisition ID, paired with canonical board URL (`https://job-boards.greenhouse.io/{board}/jobs/{id}`).
@@ -112,29 +121,40 @@ Suggested cadence:
 
 ## Deterministic prefilter
 
-The crawler pipeline must run cheap filters before AI analysis.
+The deterministic prefilter acts as an inexpensive, rule-based qualification gate before automated AI screening. It filters out jobs that are definitively non-viable or outside search criteria, without attempting subjective soft scoring.
 
-Hard filters may reject a job for explicit, confidently extracted conflicts such as:
+### Core Principles:
+1. **Never Drop Discovered Data:**
+   - Every discovered job posting from any source is persisted in the database.
+   - Postings that fail hard filtering criteria are assigned `job_status: 'filtered_out'`. They remain fully searchable, filterable, and reviewable in the web interface.
+   - The user can inspect why a job was filtered out, view the exact rule and evidence, and override the status to `saved` or queue it for AI review.
+2. **No Arbitrary Deterministic Scoring:**
+   - The system does not compute an artificial, subjective `deterministic_score`. Fit assessment is handled downstream by the fast TypeSafe AI (JEV) model.
+   - The deterministic filter enforces definitive, binary qualification constraints only (`pass` vs `fail`).
+3. **Missing Information Policy (Retain as Null / Unknown):**
+   - Job postings frequently omit salary, remote policy, or exact locations.
+   - Missing fields must be retained and represented as `NULL` in the database, treated strictly as unknowns.
+   - Missing fields **must never trigger an exclusion**. A posting with missing salary or unstated workplace type is admitted to the candidate pool for JEV evaluation.
+   - No separate `is_incomplete` flag is required; the UI and queries inspect nullable columns directly (`WHERE salary IS NULL`, etc.).
+4. **Deliberate Tolerance & "Wiggle Room":**
+   Real job descriptions are often negotiable or imprecise. The filter provides configurable flexibility:
+   - **Workplace & Commute Boundaries:** Exclude only if the posting explicitly requires 100% on-site presence AND is located outside the configured commute radius (plus buffer, e.g. target + 15 miles). Unstated workplace or location is treated as unknown and preserved.
+   - **Compensation Floor with Tolerance:** Exclude only when compensation is explicitly stated and the upper/provided bound falls completely below the configured floor minus tolerance (e.g., target minimum $120k with 15% tolerance = excludes only below $102k). Roles without listed compensation pass through.
+   - **Keyword & Qualification Relevance:** Exclude jobs that match none of the designated title aliases or required core skill keywords (completely different domain), or match explicit negative title keywords.
+   - **Excluded Titles & Seniority:** Exclude explicit non-viable titles (e.g., "Intern", "Director", "VP", "Sales Representative", "Unpaid").
+   - **Posting Staleness:** Exclude postings older than a configured age threshold (e.g., posted > 45 or 60 days ago) or where the application deadline has conclusively passed.
+   - **Work Authorization & Clearance:** Exclude only when the posting explicitly mandates citizenship, active security clearances, or states "No Sponsorship" when the user's profile requires it.
+   - **Company & Agency Exclusion:** Exclude postings from user-blacklisted companies, third-party recruiters, or staffing agencies.
+   - **Language Constraints:** Exclude postings where the job text is in an unread language.
 
-- excluded title or employment type;
-- location/workplace incompatibility;
-- compensation definitively below the configured minimum;
-- explicit authorization requirement the candidate cannot meet;
-- excluded employer;
-- posting already closed.
+### Externalized Configuration:
+- Filter rules and thresholds must be externalized in code/settings configuration files (e.g., `config/search_profile.json` or YAML/Python settings module).
+- The architecture must allow reading these settings cleanly at runtime so future UI-based configuration and KV persistence can update them without redeploying application code.
 
-Soft signals contribute to a deterministic score rather than rejecting:
-
-- title aliases;
-- desired technologies and domains;
-- seniority proximity;
-- preferred compensation;
-- remote preference;
-- missing or ambiguous fields.
-
-Regex and keyword matching must be configurable, case-normalized, tested, and capable of exclusions and aliases. Missing salary or remote information must normally be `unknown`, not an automatic rejection.
-
-For every filtered job, store enough rule identity, matched evidence, and result data to explain the decision. The user must be able to rerun current rules against previously imported jobs.
+### Auditability & Re-execution:
+- Every rule failure records: `rule_id`, `rule_name`, `passed: false`, and `evidence` (the specific text excerpt or normalized attribute matched).
+- Stored under `crawler_data.matched_rules` in the database.
+- The user can modify filter configurations in settings (and eventually through the UI) and trigger a batch re-evaluation against all stored postings at any time without re-crawling.
 
 ## Acceptance criteria
 

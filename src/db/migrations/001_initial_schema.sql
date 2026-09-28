@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS job_postings (
     availability VARCHAR(32) NOT NULL DEFAULT 'unknown',
     availability_evidence TEXT,
 
-    -- Scores
-    deterministic_score NUMERIC(5, 2),
-    ai_score NUMERIC(5, 2),
+    -- Automated Fit Classification (TypeSafe AI JEV)
+    jev_fit BOOLEAN,
+    jev_confidence NUMERIC(4, 3),
 
     -- Versioned Flexible JSON Documents
     crawler_data JSONB,
@@ -66,6 +66,12 @@ CREATE INDEX IF NOT EXISTS idx_job_postings_job_status ON job_postings(job_statu
 CREATE INDEX IF NOT EXISTS idx_job_postings_availability ON job_postings(availability);
 CREATE INDEX IF NOT EXISTS idx_job_postings_company ON job_postings(company);
 CREATE INDEX IF NOT EXISTS idx_job_postings_created_at ON job_postings(created_at DESC);
+
+-- Indexes for Nullable & High-Frequency Filter Fields
+CREATE INDEX IF NOT EXISTS idx_job_postings_salary_min ON job_postings(salary_min_annual);
+CREATE INDEX IF NOT EXISTS idx_job_postings_workplace ON job_postings(workplace_type);
+CREATE INDEX IF NOT EXISTS idx_job_postings_location ON job_postings(location);
+CREATE INDEX IF NOT EXISTS idx_job_postings_jev_confidence ON job_postings(jev_confidence DESC);
 
 -- ====================================================================
 -- Job Status Audit History (data.md section 97)
