@@ -3,10 +3,15 @@ import { RawJobPosting } from "../types/job";
 import { UnifiedJobPosting } from "../types/job-posting";
 import { getRepository } from "../db";
 import { JobPostingRepository } from "../db/repository-interface";
+import { evaluateDeterministicFilter } from "./deterministic-filter";
+import { jevClassifier, FitClassifier } from "../ai/jev-classifier";
+import { SearchProfile, loadSearchProfile } from "../config/search-profile";
 
 export interface PipelineIngestResult {
   totalProcessed: number;
   newImported: number;
+  filteredOut: number;
+  screenedWithJev: number;
   duplicatesMatched: number;
   items: Array<{
     id: string;
@@ -16,25 +21,41 @@ export interface PipelineIngestResult {
     canonicalUrl?: string | null;
     status: string;
     availability: string;
+    jevFit?: boolean | null;
+    jevConfidence?: number | null;
   }>;
+}
+
+export interface IngestOptions {
+  customRepo?: JobPostingRepository;
+  customProfile?: SearchProfile;
+  customClassifier?: FitClassifier;
 }
 
 /**
  * Core Ingestion Pipeline:
  * 1. Takes raw items from any source (JobSpy, Greenhouse, Lever, Manual)
- * 2. Normalizes, hashes, and formats to UnifiedJobPosting
+ * 2. Normalizes, hashes, and formats to UnifiedJobPosting (retaining nulls for missing fields)
  * 3. Runs 2-tier deduplication check against the persistent database
- * 4. If new: inserts with job_status = 'discovered'
- * 5. If existing: updates availability and last_checked_at without overwriting user workflow state
+ *    - If existing: updates availability and content if hash changed without overwriting user workflow state
+ * 4. If new:
+ *    - Runs deterministic hard qualification filter
+ *    - If failed: sets job_status = 'filtered_out' and records failing rule & evidence
+ *    - If passed: runs TypeSafe AI (JEV) fit classifier to compute boolean fit & confidence score
+ * 5. Persists to database
  */
 export async function ingestRawPostings(
   rawItems: RawJobPosting[],
-  customRepo?: JobPostingRepository
+  options?: IngestOptions
 ): Promise<PipelineIngestResult> {
-  const repository = customRepo || getRepository().repository;
+  const repository = options?.customRepo || getRepository().repository;
+  const profile = options?.customProfile || loadSearchProfile();
+  const classifier = options?.customClassifier || jevClassifier;
 
   let newImported = 0;
   let duplicatesMatched = 0;
+  let filteredOut = 0;
+  let screenedWithJev = 0;
   const items: PipelineIngestResult["items"] = [];
 
   for (const raw of rawItems) {
@@ -50,8 +71,18 @@ export async function ingestRawPostings(
 
     if (existing) {
       duplicatesMatched++;
-      // Update availability and touch last_checked_at
-      await repository.updateAvailability(existing.id, "open", "Refreshed by ingestion crawl");
+
+      // Content Change Detection
+      if (normalized.content_hash !== existing.content_hash) {
+        await repository.updatePostingContent(existing.id, {
+          description_text: normalized.description_text,
+          content_hash: normalized.content_hash,
+          crawler_data: normalized.crawler_data,
+          availability: "open",
+        });
+      } else {
+        await repository.updateAvailability(existing.id, "open", "Refreshed by ingestion crawl");
+      }
 
       items.push({
         id: existing.id,
@@ -64,7 +95,35 @@ export async function ingestRawPostings(
       });
     } else {
       newImported++;
-      // Insert new posting
+
+      // 3. Deterministic Hard Qualification Filter
+      const deterministicResult = evaluateDeterministicFilter(normalized, profile);
+
+      if (!deterministicResult.passed) {
+        filteredOut++;
+        normalized.job_status = "filtered_out";
+        if (normalized.crawler_data) {
+          normalized.crawler_data.matched_rules = deterministicResult.matchedRules.map((r) => ({
+            rule_id: r.rule_id,
+            passed: r.passed,
+            evidence: r.evidence,
+          }));
+        }
+      } else {
+        // 4. Automated Screening via TypeSafe AI (JEV)
+        if (profile.jevScreening.enabled) {
+          try {
+            const jevResult = await classifier.classify(normalized, profile);
+            screenedWithJev++;
+            normalized.jev_fit = jevResult.fit;
+            normalized.jev_confidence = jevResult.confidence;
+          } catch (err) {
+            console.warn(`[IngestionPipeline] JEV screening failed for ${normalized.title}:`, err);
+          }
+        }
+      }
+
+      // 5. Persist Posting
       const saved = await repository.savePosting(normalized);
 
       items.push({
@@ -75,6 +134,8 @@ export async function ingestRawPostings(
         canonicalUrl: saved.canonical_url,
         status: saved.job_status,
         availability: saved.availability,
+        jevFit: saved.jev_fit,
+        jevConfidence: saved.jev_confidence,
       });
     }
   }
@@ -82,6 +143,8 @@ export async function ingestRawPostings(
   return {
     totalProcessed: rawItems.length,
     newImported,
+    filteredOut,
+    screenedWithJev,
     duplicatesMatched,
     items,
   };

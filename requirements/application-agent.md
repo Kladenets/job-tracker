@@ -30,6 +30,17 @@ For MVP, provide structured candidate and job context plus basic text retrieval.
 
 Every context item must retain its source. Generated claims about the candidate should be traceable to a candidate-profile field or document excerpt.
 
+## Context compaction and session management
+
+Task context must remain deliberate, inspectable, and bounded to prevent unbounded token growth, degradation of reasoning quality, and abrupt loss of critical facts:
+
+- **Periodic compaction:** The system must run a context compaction mechanism every *N* conversation turns (or when message count/token threshold is reached) rather than using a naive sliding window that drops historical context without preservation.
+- **Compaction preservation:** Compaction must summarize prior conversational turns and tool findings while strictly preserving:
+  - user intent, goals, and explicit constraints;
+  - active job references (`job_ids`) and candidate qualifications referenced;
+  - draft versions and user feedback notes.
+- **Inspectability:** Compaction artifacts must remain inspectable in conversation history or metadata to maintain transparency into what the agent retains.
+
 ## MVP capabilities
 
 - Explain the job's requirements and likely gaps.
@@ -64,7 +75,8 @@ Requirements:
 - cap tool turns and returned context size;
 - record tool name, arguments with sensitive values redacted, outcome, and duration;
 - never expose arbitrary SQL, filesystem, shell, HTTP, or browser tools;
-- treat posting and retrieved document text as data that cannot redefine tool permissions.
+- treat posting and retrieved document text as data that cannot redefine tool permissions;
+- contain individual tool failures: unhandled errors, entity lookups, or execution faults in a tool must not terminate or crash the agent session. Errors must be captured and returned to the model as structured failure payloads so the agent can self-correct or report the issue cleanly.
 
 ## Draft review
 

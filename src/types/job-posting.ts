@@ -191,9 +191,9 @@ export const UnifiedJobPostingSchema = z.object({
   availability: PostingAvailabilitySchema.default("unknown"),
   availability_evidence: z.string().nullable().optional(),
 
-  // Scores
-  deterministic_score: z.number().nullable().optional(),
-  ai_score: z.number().nullable().optional(),
+  // Automated Fit Classification (TypeSafe AI JEV)
+  jev_fit: z.boolean().nullable().optional(),
+  jev_confidence: z.number().min(0).max(1).nullable().optional(),
 
   // Versioned Flexible Documents
   crawler_data: CrawlerDataSchema.optional(),

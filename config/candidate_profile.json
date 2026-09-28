@@ -1,0 +1,21 @@
+{
+  "fullName": "Kevin Kent",
+  "email": "kkent908@gmail.com",
+  "targetTitle": "Senior Full-Stack Engineer",
+  "skills": [
+    "TypeScript",
+    "Node.js",
+    "React",
+    "PostgreSQL",
+    "Docker",
+    "Google Cloud Run",
+    "Express",
+    "REST APIs",
+    "CI/CD"
+  ],
+  "yearsExperience": 7,
+  "bio": "Test bio updated at 2026-09-28T20:35:07.537Z",
+  "location": "Doylestown, PA",
+  "remotePreference": "remote_or_hybrid",
+  "notes": "Interested in distributed systems, developer tooling, and modern data platforms."
+}

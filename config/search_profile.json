@@ -1,0 +1,99 @@
+{
+  "id": "profile-default-fullstack",
+  "name": "Full-Stack Remote & Bucks County Hybrid",
+  "isActive": true,
+  "candidate": {
+    "targetTitles": [
+      "Software Engineer",
+      "Full Stack Engineer",
+      "Full Stack Developer",
+      "Frontend Engineer",
+      "Backend Engineer",
+      "Web Developer",
+      "Senior Software Engineer",
+      "Lead Software Engineer"
+    ],
+    "skills": [
+      "typescript",
+      "javascript",
+      "react",
+      "node.js",
+      "python",
+      "sql",
+      "postgresql",
+      "fastapi",
+      "docker",
+      "aws",
+      "tailwind"
+    ],
+    "requiresSponsorship": false,
+    "hasSecurityClearance": false
+  },
+  "discovery": {
+    "searchTerms": [
+      "Software Engineer",
+      "Full Stack Engineer",
+      "Frontend Engineer",
+      "React Engineer",
+      "Node Engineer"
+    ],
+    "targetLocation": {
+      "city": "Doylestown",
+      "state": "PA",
+      "zip": "18901",
+      "radiusMiles": 35,
+      "bufferMiles": 15
+    }
+  },
+  "deterministicFilterRules": {
+    "workplace": {
+      "allowedTypes": ["remote", "hybrid", "onsite", "unknown"],
+      "maxOnsiteDaysPerWeek": 2,
+      "commuteRadiusMiles": 35,
+      "commuteBufferMiles": 15,
+      "allowMissingWorkplace": true
+    },
+    "compensation": {
+      "minSalaryAnnual": 120000,
+      "tolerancePercentage": 15,
+      "allowMissingSalary": true
+    },
+    "postingAge": {
+      "maxAgeDays": 45
+    },
+    "seniority": {
+      "excludedLevels": ["intern", "student", "director", "executive"]
+    },
+    "title": {
+      "excludedTitleKeywords": [
+        "intern",
+        "internship",
+        "unpaid",
+        "sales representative",
+        "account executive",
+        "director",
+        "vice president",
+        "vp",
+        "chief",
+        "cto",
+        "cfo"
+      ]
+    },
+    "companies": {
+      "excludedCompanies": [
+        "CyberCoders",
+        "Revature",
+        "Jobot"
+      ]
+    },
+    "workAuthorization": {
+      "excludeUsCitizenshipOnly": false,
+      "excludeRequiresActiveClearance": true
+    }
+  },
+  "jevScreening": {
+    "enabled": true,
+    "model": "jev-system-1",
+    "minConfidenceRecommend": 0.70
+  }
+}

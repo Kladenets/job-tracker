@@ -22,7 +22,14 @@ Provider-specific, source-specific, and database-specific details must not leak 
 - Backend: Python (FastAPI / Uvicorn) for the ingestion engine, jobspy bridge, PostgreSQL persistence, and API services.
 - Database: PostgreSQL for MVP persistence.
 - Client / Web UI: Modern web interface (Vite + React) served for local interaction.
-- AI SDK: `@google/genai` / Google Gen AI SDK behind a provider-neutral adapter.
+- AI Architecture (Two-Tier Model):
+  - **Tier 1 (Automated Fit Classification & Screening):** TypeSafe AI (JEV model) using typed boolean `noul` decisions with confidence scoring.
+    - References:
+      - Guide: [The Ultimate Guide to JEV](https://medium.com/@unicodeveloper/the-ultimate-guide-to-jev-the-new-frontier-ai-for-faster-decisions-acd78e5f4c56)
+      - Quickstart: [TypeSafe AI Quickstart Docs](https://docs.typesafe.ai/introduction/quickstart)
+    - *Platform Resiliency Requirement:* Because new signups for TypeSafe AI / JEV may be temporarily paused, the system must provide a provider-abstracted fallback / simulation adapter to enable full local development, testing, and execution until active credentials are acquired.
+  - **Tier 2 (Interactive Conversational Agent):** `@google/genai` / Google Gen AI SDK using the modern Interactions API with multi-turn tool calling (JSON Schema functions), fluid job tagging, and persistent conversation history for deep analysis, cover letter drafting, interview preparation, and database job search. Tested locally via interactive CLI REPL and HTTP API.
+    - *Operational note (Future consideration):* While the Interactions API is the primary engine for the MVP, future iterations may evaluate a secondary fallback to standard `models.generateContent` with function declarations if provider outages or quota partitions require multi-endpoint redundancy. For MVP, outages are surfaced cleanly via offline/resilience notifications.
 - Runtime validation: Pydantic / strict runtime schemas for external input, extracted source data, and AI outputs.
 - Testing: Automated unit, integration, and contract tests runnable through documented commands.
 
@@ -37,9 +44,10 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 ## Configuration
 
 - Secrets come from environment variables or a local secret mechanism and are never returned to the browser.
-- Non-secret preferences are stored in the database or a documented config file.
+- Search profiles, deterministic filter criteria, and non-secret preferences are stored in externalized configuration files (e.g., `config/search_profile.json` or YAML/Python settings module).
+- Configuration is structured for runtime re-evaluation, paving the way for future UI-managed settings and KV storage without requiring code redeployment.
 - Validate configuration at startup and degrade gracefully when optional AI credentials are absent.
-- AI model ID, budgets, timeouts, concurrency, retention, and crawl schedules are configurable.
+- AI model IDs, budgets, timeouts, concurrency, retention, and crawl schedules are configurable.
 
 ## Local operation
 
@@ -49,6 +57,7 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 - Web and background processing must support clean startup and shutdown without corrupting active work.
 - Application upgrades must run documented migrations and fail without partially upgrading the database.
 - The product must clearly report when PostgreSQL, the crawler, or the AI provider is unavailable.
+- The application server must provide an operational health check endpoint (`GET /api/health`) that returns system uptime, process state, storage status, and AI configuration without triggering billable external calls or blocking application threads.
 
 ## AI usage controls
 
