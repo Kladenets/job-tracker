@@ -22,43 +22,43 @@ export function InboxPage() {
       />
 
       {/* Page Content Viewport */}
-      <div className="p-6 max-w-5xl mx-auto w-full space-y-4 flex-1">
-        <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4 flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Recommendation Inbox</h1>
+            <h1 className="text-lg md:text-xl font-bold tracking-tight">Recommendation Inbox</h1>
             <p className="text-xs text-[var(--text-secondary)]">
               Curated postings discovered across ATS boards and aggregators, filtered by your candidate profile.
             </p>
           </div>
-          <span className="text-xs font-mono-tabular px-2 py-1 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
+          <span className="self-start sm:self-auto text-xs font-mono-tabular px-2 py-0.5 md:py-1 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
             Active Feed
           </span>
         </div>
 
         {/* Placeholder Job Card Mockup showcasing Tier 1 Scan Row */}
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4 shadow-xs space-y-3">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 md:p-4 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 md:gap-4">
+            <div className="flex items-start gap-3 min-w-0">
               {/* Circular SVG Arc Ring Mockup */}
-              <div className="relative h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-[var(--status-recommended-bg)] text-[var(--status-recommended-fg)] font-mono-tabular font-bold text-xs border border-[var(--status-recommended-fg)]/20">
+              <div className="relative h-9 w-9 md:h-10 md:w-10 shrink-0 flex items-center justify-center rounded-full bg-[var(--status-recommended-bg)] text-[var(--status-recommended-fg)] font-mono-tabular font-bold text-xs border border-[var(--status-recommended-fg)]/20">
                 87%
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-sm text-[var(--text-primary)]">
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <h3 className="font-bold text-xs md:text-sm text-[var(--text-primary)]">
                     Senior Staff Distributed Systems Engineer
                   </h3>
                   <span className="text-xs text-[var(--text-muted)] font-normal">· Stripe</span>
                 </div>
                 {/* Zero-Pill Typography with middots */}
-                <p className="text-xs text-[var(--text-secondary)] font-mono-tabular">
+                <p className="text-[11px] md:text-xs text-[var(--text-secondary)] font-mono-tabular break-words">
                   San Francisco, CA (Remote US) · $185k – $225k · Posted 2d ago · Greenhouse
                 </p>
               </div>
             </div>
 
             {/* Quick Triage Buttons */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 self-end sm:self-start shrink-0 pt-1 sm:pt-0">
               <button
                 type="button"
                 className="px-2.5 py-1 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-medium hover:bg-[var(--surface-sunken)] transition-colors cursor-pointer"
@@ -81,9 +81,9 @@ export function InboxPage() {
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-            <span>Deterministic Rules: ✅ Experience (6+ yrs) · ✅ Remote US · ⚠️ Salary range unlisted</span>
-            <span className="font-mono-tabular">Press Space or click to expand full audit drawer</span>
+          <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] text-[var(--text-muted)]">
+            <span>Deterministic Rules: ✅ Experience (6+ yrs) · ✅ Remote US · ⚠️ Salary unlisted</span>
+            <span className="font-mono-tabular hidden sm:inline">Press Space or click to expand audit drawer</span>
           </div>
         </div>
 

@@ -9,7 +9,6 @@ import {
   PanelLeft,
   Sparkles,
   HelpCircle,
-  Briefcase,
 } from "lucide-react";
 import { useShellStore } from "./shell-store";
 import { ThemeToggle } from "../theme/theme-toggle";
@@ -61,7 +60,10 @@ export function SidebarRail() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
-      const isInput = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA" || activeEl?.getAttribute("contenteditable") === "true";
+      const isInput =
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.getAttribute("contenteditable") === "true";
       if (isInput) return;
 
       if (e.key === "[") {
@@ -85,45 +87,56 @@ export function SidebarRail() {
   return (
     <aside
       aria-label="Primary Navigation"
-      className={`hidden md:flex flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-elevated)] transition-[width] duration-200 select-none relative z-20 shrink-0 ${
-        sidebarCollapsed ? "w-[3.75rem]" : "w-[14rem]"
+      className={`hidden md:flex flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-elevated)] transition-[width] duration-300 ease-in-out select-none relative z-20 shrink-0 overflow-hidden ${
+        sidebarCollapsed ? "w-14" : "w-56"
       }`}
     >
-      {/* App Header & Env Badge */}
-      <div className="h-14 border-b border-[var(--border-subtle)] px-3 flex items-center justify-between">
-        {!sidebarCollapsed ? (
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="h-8 w-8 rounded-md bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex items-center justify-center font-bold text-[var(--border-focus)] shrink-0">
-              <Briefcase className="h-4 w-4" />
-            </div>
-            <div className="truncate">
-              <span className="text-xs font-bold tracking-tight block truncate">Job Tracker</span>
-              <span className="text-[10px] font-mono-tabular text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.2 rounded font-semibold">
-                DEV :3000
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto h-8 w-8 rounded-md bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex items-center justify-center font-bold text-[var(--border-focus)]">
-            <Briefcase className="h-4 w-4" />
-          </div>
-        )}
+      {/* 
+        App Header (h-13 matches top filter bar exactly):
+        Contains the brand title, dev badge, and the toggle button in the exact same top slot.
+      */}
+      <div className="h-13 border-b border-[var(--border-subtle)] flex items-center shrink-0 w-56 px-2.5 relative">
+        {/* Expanded Title & Dev Badge Container */}
+        <div
+          className={`flex items-center gap-2 min-w-0 flex-1 whitespace-nowrap transition-opacity duration-200 ${
+            sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
+          }`}
+        >
+          <span className="text-xs font-bold tracking-tight text-[var(--text-primary)] shrink-0">
+            Job Tracker
+          </span>
+          <span className="text-[10px] font-mono-tabular text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded font-semibold inline-flex items-center shrink-0">
+            DEV :3000
+          </span>
+        </div>
 
-        {!sidebarCollapsed && (
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            title="Collapse sidebar ([)"
-            aria-label="Collapse sidebar"
-            className="p-1.5 rounded-md hover:bg-[var(--surface-sunken)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          >
+        {/* 
+          Single Toggle Button:
+          - When expanded: docked to the right of the title (right-2.5).
+          - When collapsed: smoothly glides to the center of the 56px rail (left-[0.625rem] = 10px from edge, (56-36)/2 = 10px).
+          - Transition is smooth across both position and icon swap!
+        */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? "Expand sidebar ([)" : "Collapse sidebar ([)"}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={`absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-9 w-9 rounded-md transition-all duration-300 ease-in-out cursor-pointer z-10 ${
+            sidebarCollapsed
+              ? "left-[0.625rem] hover:bg-[var(--surface-sunken)] text-[var(--border-focus)] hover:text-[var(--text-primary)]"
+              : "right-2.5 hover:bg-[var(--surface-sunken)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          {sidebarCollapsed ? (
+            <PanelLeft className="h-4 w-4" />
+          ) : (
             <PanelLeftClose className="h-4 w-4" />
-          </button>
-        )}
+          )}
+        </button>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 py-3 px-2 space-y-1">
+      <nav className="flex-1 py-3 px-2 space-y-1 overflow-hidden">
         {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPath === item.to || (item.to !== "/" && currentPath.startsWith(item.to));
@@ -133,74 +146,96 @@ export function SidebarRail() {
               key={item.to}
               to={item.to}
               title={sidebarCollapsed ? `${item.label} (${item.shortcut})` : undefined}
-              className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-medium transition-colors group relative cursor-pointer ${
+              className={`flex items-center h-9 rounded-md text-xs font-medium transition-[width,background-color,border-color] duration-300 ease-in-out group relative cursor-pointer overflow-hidden ${
+                sidebarCollapsed ? "w-10" : "w-52"
+              } ${
                 isActive
                   ? "bg-[var(--surface-sunken)] text-[var(--text-primary)] font-semibold border border-[var(--border-subtle)] shadow-xs"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]/60"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]/60 border border-transparent"
               }`}
             >
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--border-focus)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"}`} />
-              
-              {!sidebarCollapsed && (
-                <span className="truncate flex-1">{item.label}</span>
-              )}
+              {/* 
+                Fixed 40px icon anchor: (w-10 = 40px).
+                Matches the collapsed <a> width (w-10), perfectly centering the icon within the button 
+                and within the 56px rail (40px button + 8px padding each side = 56px).
+                The icon never moves during expand or collapse!
+              */}
+              <div className="w-10 h-9 flex items-center justify-center shrink-0">
+                <Icon
+                  className={`h-4 w-4 shrink-0 transition-colors ${
+                    isActive
+                      ? "text-[var(--border-focus)]"
+                      : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
+                  }`}
+                />
+              </div>
 
-              {!sidebarCollapsed && item.shortcut && (
-                <kbd className="hidden lg:inline-block text-[10px] font-mono-tabular px-1 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
-                  {item.shortcut}
-                </kbd>
-              )}
+              {/* Text label & shortcut fade smoothly and cleanly without wrapping */}
+              <div
+                className={`flex items-center justify-between flex-1 min-w-0 pr-2.5 whitespace-nowrap transition-opacity duration-200 ${
+                  sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
+                }`}
+              >
+                <span className="truncate pr-1 text-xs">{item.label}</span>
+
+                {item.shortcut && (
+                  <kbd className="hidden lg:inline-block text-[10px] font-mono-tabular px-1 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-muted)] shrink-0">
+                    {item.shortcut}
+                  </kbd>
+                )}
+              </div>
             </Link>
           );
         })}
       </nav>
 
       {/* Footer Controls */}
-      <div className="border-t border-[var(--border-subtle)] p-2 space-y-2">
-        {/* Collapsed expand trigger button */}
-        {sidebarCollapsed && (
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            title="Expand sidebar ([)"
-            aria-label="Expand sidebar"
-            className="w-full flex items-center justify-center p-2 rounded-md hover:bg-[var(--surface-sunken)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          >
-            <PanelLeft className="h-4 w-4" />
-          </button>
-        )}
-
+      <div className="border-t border-[var(--border-subtle)] p-2 space-y-2 overflow-hidden">
         {/* AI Tier Badge */}
-        {!sidebarCollapsed ? (
-          <div className="flex items-center justify-between px-2 py-1.5 rounded-md bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[11px] font-mono-tabular">
-            <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-              <Sparkles className="h-3 w-3 text-amber-500" />
-              AI Engine
-            </span>
-            <span className="text-[var(--status-recommended-fg)] font-semibold">Free Tier</span>
-          </div>
-        ) : (
-          <div
-            title="AI Engine: Free Tier"
-            className="flex items-center justify-center p-2 rounded-md text-amber-500 hover:bg-[var(--surface-sunken)]"
-          >
+        <div
+          className={`h-9 flex items-center rounded-md bg-[var(--surface-sunken)]/70 border border-[var(--border-subtle)] overflow-hidden transition-[width] duration-300 ease-in-out ${
+            sidebarCollapsed ? "w-10" : "w-52"
+          }`}
+        >
+          <div className="w-10 h-9 flex items-center justify-center shrink-0 text-amber-500">
             <Sparkles className="h-4 w-4" />
           </div>
-        )}
+          <div
+            className={`flex items-center justify-between flex-1 min-w-0 pr-2 whitespace-nowrap text-[11px] font-mono-tabular transition-opacity duration-200 ${
+              sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
+            }`}
+          >
+            <span className="text-[var(--text-secondary)] truncate">AI Engine</span>
+            <span className="text-[var(--status-recommended-fg)] font-semibold shrink-0">Free Tier</span>
+          </div>
+        </div>
 
         {/* Theme and Shortcut Guide Cluster */}
-        <div className={`flex items-center ${sidebarCollapsed ? "flex-col gap-1.5" : "justify-between px-1"}`}>
-          <ThemeToggle />
-          
-          <button
-            type="button"
-            onClick={toggleShortcutHelp}
-            title="Keyboard Shortcuts (?)"
-            aria-label="Keyboard Shortcuts"
-            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+        <div
+          className={`flex items-center h-9 transition-[width] duration-300 ease-in-out relative ${
+            sidebarCollapsed ? "w-10" : "w-52"
+          }`}
+        >
+          {/* Theme Toggle Button - matches the exact 40px icon anchor */}
+          <div className="w-10 h-9 flex items-center justify-center shrink-0">
+            <ThemeToggle />
+          </div>
+
+          <div
+            className={`flex items-center justify-end flex-1 pr-1 whitespace-nowrap transition-opacity duration-200 ${
+              sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
+            }`}
           >
-            <HelpCircle className="h-4 w-4" />
-          </button>
+            <button
+              type="button"
+              onClick={toggleShortcutHelp}
+              title="Keyboard Shortcuts (?)"
+              aria-label="Keyboard Shortcuts"
+              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </aside>

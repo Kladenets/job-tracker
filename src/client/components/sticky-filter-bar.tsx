@@ -56,9 +56,9 @@ export function StickyFilterBar({
   }, []);
 
   return (
-    <div className="sticky top-0 z-10 w-full border-b border-[var(--border-subtle)] bg-[var(--surface-base)]/85 backdrop-blur-md px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 min-h-[3.25rem]">
+    <div className="sticky top-0 z-10 w-full border-b border-[var(--border-subtle)] bg-[var(--surface-base)]/85 backdrop-blur-md px-3 md:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 md:gap-3 md:h-13 shrink-0">
       {/* Left: Search with / shortcut + Count badge */}
-      <div className="flex items-center gap-3 flex-1 min-w-[14rem] max-w-md">
+      <div className="flex items-center gap-2 md:gap-3 w-full sm:flex-1 sm:max-w-md">
         <div className="relative w-full">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-muted)]" />
           <input
@@ -67,74 +67,77 @@ export function StickyFilterBar({
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search jobs, companies, skills..."
-            className="w-full pl-8 pr-8 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
+            className="w-full pl-8 pr-7 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
           />
-          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[10px] font-mono-tabular text-[var(--text-muted)]">
+          <kbd className="hidden sm:inline-block absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[10px] font-mono-tabular text-[var(--text-muted)]">
             /
           </kbd>
         </div>
-        <span className="text-xs font-mono-tabular text-[var(--text-muted)] whitespace-nowrap">
-          {itemCount} of {totalCount}
+        <span className="text-xs font-mono-tabular text-[var(--text-muted)] whitespace-nowrap shrink-0">
+          {itemCount}/{totalCount}
         </span>
       </div>
 
-      {/* Center: Segmented Quick Toggles */}
-      <div className="flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-0.5 text-xs">
-        {segments.map((seg) => {
-          const isSelected = activeSegment === seg.id;
-          return (
+      {/* Right Row on Mobile / Inline on Desktop: Segments + Filters + Sort */}
+      <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+        {/* Center: Segmented Quick Toggles */}
+        <div className="flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-0.5 text-xs shrink-0">
+          {segments.map((seg) => {
+            const isSelected = activeSegment === seg.id;
+            return (
+              <button
+                key={seg.id}
+                type="button"
+                onClick={() => onSegmentChange(seg.id)}
+                className={`px-2 md:px-3 py-1 rounded-sm font-medium transition-colors cursor-pointer text-[11px] md:text-xs whitespace-nowrap ${
+                  isSelected
+                    ? "bg-[var(--surface-base)] text-[var(--text-primary)] shadow-xs font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {seg.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Filters & Sort Controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onToggleFilters && (
             <button
-              key={seg.id}
               type="button"
-              onClick={() => onSegmentChange(seg.id)}
-              className={`px-3 py-1 rounded-sm font-medium transition-colors cursor-pointer ${
-                isSelected
-                  ? "bg-[var(--surface-base)] text-[var(--text-primary)] shadow-xs font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              onClick={onToggleFilters}
+              className={`inline-flex items-center gap-1 px-2 py-1 md:py-1.5 rounded-md border text-xs font-medium transition-colors cursor-pointer ${
+                filterCount > 0
+                  ? "border-[var(--border-focus)] bg-[var(--surface-sunken)] text-[var(--border-focus)]"
+                  : "border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}
             >
-              {seg.label}
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Filters</span>
+              {filterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-[var(--border-focus)] text-white text-[10px] font-mono-tabular font-bold">
+                  {filterCount}
+                </span>
+              )}
             </button>
-          );
-        })}
-      </div>
+          )}
 
-      {/* Right: Filters & Sort Controls */}
-      <div className="flex items-center gap-2">
-        {onToggleFilters && (
-          <button
-            type="button"
-            onClick={onToggleFilters}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors cursor-pointer ${
-              filterCount > 0
-                ? "border-[var(--border-focus)] bg-[var(--surface-sunken)] text-[var(--border-focus)]"
-                : "border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            }`}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span>Filters</span>
-            {filterCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-[var(--border-focus)] text-white text-[10px] font-mono-tabular font-bold">
-                {filterCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Sort Select */}
-        <div className="relative">
-          <select
-            value={sortValue}
-            onChange={(e) => onSortChange(e.target.value)}
-            className="pl-2.5 pr-7 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] transition-colors cursor-pointer appearance-none"
-          >
-            {sortOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <ArrowUpDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-muted)]" />
+          {/* Sort Select */}
+          <div className="relative">
+            <select
+              value={sortValue}
+              onChange={(e) => onSortChange(e.target.value)}
+              className="pl-2 pr-6 py-1 md:py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[11px] md:text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] transition-colors cursor-pointer appearance-none"
+            >
+              {sortOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ArrowUpDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--text-muted)]" />
+          </div>
         </div>
       </div>
     </div>
