@@ -6,18 +6,22 @@ Provide a unified, high-performance, single-page web interface (SPA) for the Job
 
 ## 2. Technology Choices & Justification
 
-- **Framework:** React (v18/19) with Vite
-  - *Justification:* Near-instant local HMR, lean client bundle, fast production builds, and zero SSR server management complexity.
-- **Routing:** React Router (v6) or TanStack Router
-  - *Justification:* Standard client-side routing with clean URL parameters for persistent filter states, tab switches, and deep links to specific job IDs.
-- **Component & UI Foundation:** Tailwind CSS + Radix UI / headless primitives
-  - *Justification:* Utility-first CSS eliminates CSS module overhead and stylesheet bloat. Clean typographic hierarchy and dark/light system adaptation.
+- **Framework & Runtime:** React 19 with Vite
+  - *Justification:* Near-instant local HMR, lean client bundle, fast production builds, and native React 19 concurrency primitives (`useOptimistic`, `useActionState`).
+- **Routing:** TanStack Router
+  - *Justification:* 100% type-safe routing, nested layouts, and first-class search parameter validation with Zod. Essential for preserving complex URL filter states (status, workplace type, sort orders, and active job selections) without runtime type guessing.
+- **Component & UI Foundation:** shadcn/ui + Tailwind CSS
+  - *Justification:* Headless Radix UI accessibility primitives styled with utility-first Tailwind CSS. Components live directly in the codebase (`src/components/ui`), offering full design ownership, crisp high-density aesthetics, and consistent design system tokens (borders, muted surfaces, focus rings) without third-party vendor lock-in.
+- **Animation Engine:** React Motion
+  - *Justification:* Physics-based spring animations for fluid, natural UI transitions: recommendation card triage (swipe/dismiss/save), slide-out AI assistant drawer, modal dialogues, and Kanban column movements.
 - **Icons:** `lucide-react`
-  - *Justification:* High-consistency icon set across all navigation, status badges, and action buttons.
-- **State Management & Data Fetching:** TanStack Query (React Query)
-  - *Justification:* Automatic background refetching, request deduplication, optimistic updates for workflow actions (e.g. Save/Dismiss), and seamless loading/cold-start state handling.
+  - *Justification:* High-consistency icon set across all navigation, status badges, metrics, and triage action buttons.
+- **State Management & Data Fetching:** TanStack Query (React Query v5)
+  - *Justification:* Automatic background refetching, request deduplication, optimistic updates for workflow actions (e.g., instant Save/Dismiss UI state transitions), and seamless loading/cold-start state handling.
 - **Local Client State:** Zustand
-  - *Justification:* Extremely lightweight store for active UI filters, selected jobs, and the open/closed state of the conversational AI drawer.
+  - *Justification:* Extremely lightweight store for ephemeral UI state: active view filters, job selection sets, and the open/closed state of the conversational AI assistant drawer.
+
+> **Note on SSR Capability:** The selected architectural stack (React 19 + Vite + TanStack Router + Express) is fully capable of supporting Server-Side Rendering (SSR) in the future (e.g., via Vite Express SSR middleware or TanStack Start) to pre-render database-driven pages for near-instant first paint. However, MVP requirements specify a client-side Single Page Application (SPA) architecture to prioritize lean container resource usage on the free-tier host, simple deployment pipelines, and zero hydration complexity. No decision has been made on an SSR implementation approach, and SSR is not an MVP requirement.
 
 ## 3. Local Development, Dev Proxy & Remote Server Testing
 

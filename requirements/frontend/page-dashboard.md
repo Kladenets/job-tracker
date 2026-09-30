@@ -2,15 +2,17 @@
 
 ## 1. Functional Requirements
 
-### 1.1 Date Range Selection
-- Selectable presets: `Last 7 Days`, `Last 30 Days`, `Last 90 Days`, `All Time`, and `Custom Range`.
-- All metric queries must respect the active date range filter.
+### 1.1 In-Page Sticky Filter Bar & Date Range Selection
+- **Sticky Controls Header:** Positioned at top of page viewport with backdrop blur (`backdrop-filter: blur(8px)`).
+- **Date Range Presets:** `Last 7 Days`, `Last 30 Days`, `Last 90 Days`, `All Time`, and `Custom Range`.
+- All metric queries respect the active date range filter and serialize into TanStack Router URL params.
 
 ### 1.2 Core Discovery Funnel Cards
-- **Jobs Discovered:** Total raw job postings ingested across all sources within the period.
+- **Jobs Discovered:** Total raw job postings ingested across all sources within the period (tabular monospace).
 - **Passed Filtering / Recommended:** Total jobs meeting deterministic search criteria and JEV qualification thresholds.
 - **Jobs Saved:** Total jobs explicitly transitioned to `saved` or `reviewing` status.
 - **Jobs Dismissed:** Total jobs marked as irrelevant or rejected by the user.
+- **Micro Container Queries:** Metric cards adapt font and padding based on grid cell width (`@container`).
 
 ### 1.3 Application & Interview Conversion Rates
 - **Applications Submitted:** Count of distinct jobs advanced to `applied` stage.
