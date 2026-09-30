@@ -31,8 +31,8 @@ app.use(cors());
 app.use(express.json());
 app.use(authMiddleware);
 
-// Root health & meta endpoint
-app.get("/", (_req: Request, res: Response) => {
+// Meta service endpoint (relocated from root to allow Vite UI to serve on /)
+app.get("/api/meta", (_req: Request, res: Response) => {
   const { engine } = getRepository();
   const profile = loadSearchProfile();
   res.json({
