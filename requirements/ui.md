@@ -11,7 +11,23 @@ Provide a local web interface for configuration, recommendation review, applicat
 - Candidate-profile editor.
 - Search-profile editor for deterministic qualification rules, title aliases, salary tolerance, and screening preferences.
 - Source configuration and manual URL import.
-- AI provider status (TypeSafe AI / JEV and Google Gemini), selected models, budgets, and fallback status.
+- AI provider status (TypeSafe AI / JEV and Google Gemini), selected models, active key tier, budgets, and fallback status.
+
+### AI Engine Status & Key Telemetry
+
+- **Owner View Telemetry:**
+  - An unobtrusive status indicator in the header / agent control bar communicating the active engine state:
+    - `AI Engine: Dev Mode (Development Key)` — when running locally or on staging.
+    - `AI Engine: Online (Free Tier)` — when operating on the zero-cost primary key in production.
+    - `AI Engine: Online (Pro Backup - Failover Active)` — when an HTTP 429 quota exhaustion has automatically switched the session to the paid pro backup.
+    - `AI Engine: Simulated / Offline Mode` — when no API key is available or both tiers are exhausted.
+  - **Failover Notification:** A subtle toast or banner when an HTTP 429 occurs: *"Free tier rate limit reached. Switched seamlessly to backup Pro tier."*
+- **Public Guest View Telemetry:**
+  - A clean, consumer-facing status indicator: `AI Assistant: Online` (or `AI Assistant: Capacity Reached` if the guest quota is exhausted).
+  - All internal infrastructure terminology (`Free Tier`, `Pro Backup`, `Development Key`) is strictly hidden from guest visitors.
+- **Security & Perimeter Boundary:**
+  - Raw API keys or partial key strings must never be sent to the browser or displayed in logs, UI badges, or error messages.
+  - No UI form fields or inputs for entering Gemini keys exist in the web client; configuration remains strictly server-side via environment variables.
 
 ### Discovery runs
 

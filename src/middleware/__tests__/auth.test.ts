@@ -127,7 +127,41 @@ try {
   });
   assert(nextCalled5 === true, "Valid Bearer token must proceed");
   assert(testContext.req.user?.authSource === "bearer-token", "Auth source marked as bearer-token");
+  assert(testContext.req.user?.role === "owner", "Bearer token user assigned owner role");
   console.log("✓ Bearer token authorization verified for automated pipeline triggers");
+
+  // Test 6: Public Guest mode allows read-only and agent chat in production
+  console.log("[Test 6] Verifying public guest portfolio access (read-only allowed, mutations rejected)");
+  process.env.NODE_ENV = "production";
+  delete process.env.API_SECRET_KEY;
+  delete process.env.AUTH_BYPASS_DEV;
+
+  // 6a: Read-only GET /api/jobs as guest
+  const guestGetContext = {
+    ...createMockReq({ path: "/api/jobs" }),
+    req: { path: "/api/jobs", method: "GET", headers: {} } as unknown as Request,
+  };
+  let nextCalled6a = false;
+  authMiddleware(guestGetContext.req, guestGetContext.res, () => {
+    nextCalled6a = true;
+  });
+  assert(nextCalled6a === true, "Public guest should access GET /api/jobs");
+  assert(guestGetContext.req.user?.role === "guest", "Guest role assigned");
+  assert(guestGetContext.req.user?.authSource === "public-guest", "Auth source set to public-guest");
+  console.log("✓ Public guest permitted read-only access with role: 'guest'");
+
+  // 6b: Mutations rejected in production without auth
+  const guestMutationContext = {
+    ...createMockReq({ path: "/api/jobs" }),
+    req: { path: "/api/jobs", method: "POST", headers: {} } as unknown as Request,
+  };
+  let nextCalled6b = false;
+  authMiddleware(guestMutationContext.req, guestMutationContext.res, () => {
+    nextCalled6b = true;
+  });
+  assert(nextCalled6b === false, "Public guest mutation must NOT proceed");
+  assert(guestMutationContext.result.statusCalled === 401, "Expected 401 Unauthorized for mutation without credentials");
+  console.log("✓ Unauthenticated mutations safely rejected in production");
 
   console.log("\n==========================================================");
   console.log("  ALL AUTH & PERIMETER DEFENSE TESTS PASSED SUCCESSFULLY! ");

@@ -4,6 +4,7 @@ import { Tool, ToolContext } from "./tool";
 import { createDefaultTools } from "./tools";
 import { getRepository } from "../../db";
 import { loadSearchProfile } from "../../config/search-profile";
+import { resolveGeminiApiKey, triggerProFailover, isFailoverActive } from "../key-resolver";
 
 export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
@@ -24,6 +25,8 @@ export interface AgentConfig {
   readonly model?: string;
   readonly tools?: Tool[];
   readonly apiKey?: string;
+  readonly role?: "owner" | "guest";
+  readonly preferProBackup?: boolean;
 }
 
 export interface AgentTurnResult {
@@ -35,16 +38,26 @@ export class GeminiAgent {
   readonly #client: GoogleGenAI | null = null;
   readonly #model: string;
   readonly #tools: readonly Tool[];
+  readonly activeTier: string;
 
   constructor(config?: AgentConfig) {
-    const apiKey =
-      config?.apiKey !== undefined
-        ? config.apiKey
-        : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+    let resolvedKey = config?.apiKey;
+    let tier = "custom";
 
-    if (apiKey && apiKey.trim().length > 0) {
+    if (!resolvedKey) {
+      const res = resolveGeminiApiKey({
+        role: config?.role,
+        preferProBackup: config?.preferProBackup,
+      });
+      resolvedKey = res.apiKey;
+      tier = res.tier;
+    }
+
+    this.activeTier = tier;
+
+    if (resolvedKey && resolvedKey.trim().length > 0) {
       this.#client = new GoogleGenAI({
-        apiKey,
+        apiKey: resolvedKey,
         httpOptions: {
           headers: {
             "User-Agent": "aistudio-build",
@@ -101,6 +114,18 @@ export class GeminiAgent {
     } catch (err: unknown) {
       const errAny = err as any;
       const msg = err instanceof Error ? err.message : String(err);
+      const isRateLimit =
+        errAny?.status === 429 ||
+        errAny?.error?.code === 429 ||
+        msg.includes("429") ||
+        msg.includes("RESOURCE_EXHAUSTED") ||
+        msg.includes("quota");
+
+      if (isRateLimit && !isFailoverActive()) {
+        console.warn("[GeminiAgent] HTTP 429 / Quota exhaustion detected on primary tier. Triggering failover to GEMINI_API_KEY_PRO.");
+        triggerProFailover();
+      }
+
       console.warn(
         `[GeminiAgent] Generation error:`,
         msg,

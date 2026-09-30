@@ -17,6 +17,7 @@ import { geminiAgent } from "./ai/gemini-agent";
 import { GeminiAgent } from "./ai/agent/gemini-agent";
 import { Conversation } from "./ai/agent/conversation";
 import { authMiddleware } from "./middleware/auth";
+import { resolveGeminiApiKey } from "./ai/key-resolver";
 
 dotenv.config();
 
@@ -52,7 +53,8 @@ app.get("/health", (_req: Request, res: Response) => {
 app.get("/api/health", (_req: Request, res: Response) => {
   const { engine } = getRepository();
   const profile = loadSearchProfile();
-  const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== "");
+  const keyInfo = resolveGeminiApiKey();
+  const hasGeminiKey = Boolean(keyInfo.apiKey);
   const hasJevKey = Boolean(process.env.TYPESAFE_AI_API_KEY && process.env.TYPESAFE_AI_API_KEY.trim() !== "");
 
   res.json({
@@ -68,6 +70,8 @@ app.get("/api/health", (_req: Request, res: Response) => {
     aiProviders: {
       geminiInteractions: {
         configured: hasGeminiKey,
+        tier: keyInfo.tier,
+        failoverActive: keyInfo.failoverActive,
         mode: hasGeminiKey ? "live" : "resilient-offline-simulation",
         model: process.env.GEMINI_MODEL || "gemini-3.5-flash-lite",
       },
@@ -457,14 +461,23 @@ app.post("/api/agent/conversations/:id/messages", async (req: Request, res: Resp
       return res.status(400).json({ success: false, error: "Missing 'message' string in request body" });
     }
 
-    const turnResult = await interactiveAgent.run(prompt, conv);
+    const userRole = req.user?.role || "owner";
+    const agent = new GeminiAgent({ role: userRole });
+    const turnResult = await agent.run(prompt, conv);
     await repository.saveConversation(conv);
+
+    const keyResolution = resolveGeminiApiKey({ role: userRole });
 
     return res.json({
       success: true,
       text: turnResult.text,
       toolCalls: turnResult.toolCalls,
       conversation: conv.toJSON(),
+      aiTelemetry: {
+        role: userRole,
+        tier: keyResolution.tier,
+        failoverActive: keyResolution.failoverActive,
+      },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Agent turn failed";

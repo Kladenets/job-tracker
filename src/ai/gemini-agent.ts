@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { UnifiedJobPosting } from "../types/job-posting";
 import { SearchProfile, loadSearchProfile } from "../config/search-profile";
+import { resolveGeminiApiKey } from "./key-resolver";
 
 export interface DeepAnalysisResult {
   overallFitScore: number;
@@ -22,9 +23,10 @@ export class GeminiJobAgent {
   private apiKey: string | undefined;
 
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY;
+    const { apiKey } = resolveGeminiApiKey();
+    this.apiKey = apiKey;
     if (this.apiKey) {
-      this.ai = new GoogleGenAI();
+      this.ai = new GoogleGenAI({ apiKey: this.apiKey });
     }
   }
 
