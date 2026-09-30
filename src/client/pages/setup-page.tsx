@@ -3,17 +3,17 @@ import { Sliders, RefreshCw, Cpu, Database, CheckCircle2 } from "lucide-react";
 
 export function SetupPage() {
   return (
-    <div className="flex-1 p-6 max-w-4xl mx-auto w-full space-y-6">
-      <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+    <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-[var(--border-subtle)]">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Setup & Configuration</h1>
+          <h1 className="text-lg md:text-xl font-bold tracking-tight">Setup & Configuration</h1>
           <p className="text-xs text-[var(--text-secondary)]">
             Manage candidate qualification rules, target titles, source crawlers, and Gemini agent credentials.
           </p>
         </div>
         <button
           type="button"
-          className="px-3 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-xs font-semibold hover:bg-[var(--surface-sunken)] transition-colors flex items-center gap-1.5 cursor-pointer"
+          className="self-start sm:self-auto px-3 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-xs font-semibold hover:bg-[var(--surface-sunken)] transition-colors flex items-center gap-1.5 cursor-pointer"
         >
           <RefreshCw className="h-3.5 w-3.5 text-[var(--border-focus)]" />
           <span>Run Discovery Now</span>

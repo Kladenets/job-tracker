@@ -28,17 +28,17 @@ export function ApplicationsPage() {
         ]}
       />
 
-      <div className="p-6 max-w-6xl mx-auto w-full space-y-4 flex-1">
-        <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+      <div className="p-4 md:p-6 max-w-6xl mx-auto w-full space-y-4 flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Application Tracker</h1>
+            <h1 className="text-lg md:text-xl font-bold tracking-tight">Application Tracker</h1>
             <p className="text-xs text-[var(--text-secondary)]">
               Manage multi-stage interview lifecycles, next-action deadlines, and interview notes.
             </p>
           </div>
           <button
             type="button"
-            className="px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer"
+            className="self-start sm:self-auto px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Application</span>

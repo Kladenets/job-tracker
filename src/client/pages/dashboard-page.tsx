@@ -27,15 +27,15 @@ export function DashboardPage() {
         sortOptions={[{ id: "default", label: "Standard View" }]}
       />
 
-      <div className="p-6 max-w-5xl mx-auto w-full space-y-6 flex-1">
-        <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4 md:space-y-6 flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Metrics & Conversion Funnel</h1>
+            <h1 className="text-lg md:text-xl font-bold tracking-tight">Metrics & Conversion Funnel</h1>
             <p className="text-xs text-[var(--text-secondary)]">
               Auditable discovery throughput, interview conversion rates, and small-sample data guards.
             </p>
           </div>
-          <span className="text-xs font-mono-tabular px-2.5 py-1 rounded bg-[var(--status-marginal-bg)] text-[var(--status-marginal-fg)] border border-[var(--status-marginal-fg)]/20 font-semibold flex items-center gap-1">
+          <span className="self-start sm:self-auto text-xs font-mono-tabular px-2.5 py-1 rounded bg-[var(--status-marginal-bg)] text-[var(--status-marginal-fg)] border border-[var(--status-marginal-fg)]/20 font-semibold flex items-center gap-1">
             <AlertTriangle className="h-3 w-3" />
             Early Signal: N &lt; 10
           </span>
