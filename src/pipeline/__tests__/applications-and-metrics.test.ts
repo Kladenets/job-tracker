@@ -1,11 +1,15 @@
 import assert from "node:assert";
-import { getRepository } from "../../db";
+import fs from "node:fs";
+import path from "node:path";
+import { FileJobRepository } from "../../db/file-repository";
 import { UnifiedJobPosting } from "../../types/job-posting";
 
 console.log("=== Running Applications, Profile, and Metrics Integration Tests ===");
 
 async function runTests() {
-  const { repository } = getRepository();
+  const testStorePath = path.join(process.cwd(), "data", "test_app_metrics_store.json");
+  if (fs.existsSync(testStorePath)) fs.unlinkSync(testStorePath);
+  const repository = new FileJobRepository(testStorePath);
 
   // Seed a test job for application tracking
   const jobId = "11111111-2222-3333-4444-555555555555";

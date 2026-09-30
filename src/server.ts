@@ -55,7 +55,10 @@ app.get("/api/health", (_req: Request, res: Response) => {
   const profile = loadSearchProfile();
   const keyInfo = resolveGeminiApiKey();
   const hasGeminiKey = Boolean(keyInfo.apiKey);
-  const hasJevKey = Boolean(process.env.TYPESAFE_AI_API_KEY && process.env.TYPESAFE_AI_API_KEY.trim() !== "");
+  const hasJevKey = Boolean(
+    (process.env.TYPESAFE_API_KEY && process.env.TYPESAFE_API_KEY.trim() !== "") ||
+    (process.env.TYPESAFE_AI_API_KEY && process.env.TYPESAFE_AI_API_KEY.trim() !== "")
+  );
 
   res.json({
     status: "healthy",

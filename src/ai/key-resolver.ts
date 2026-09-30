@@ -3,12 +3,15 @@
  *
  * Rules:
  * 1. Development & Staging (NODE_ENV !== "production" or APP_ENV === "staging" | "development"):
- *    - Prefers DEVELOPMENT_GEMINI_API_KEY so local/staging testing never consumes production tokens.
+ *    - Prefers GEMINI_API_KEY (the default Google AI Studio secret) so local/staging testing
+ *      never consumes production tokens.
+ *    - Also accepts legacy DEVELOPMENT_GEMINI_API_KEY if configured.
  * 2. Role = 'guest':
- *    - Uses GUEST_GEMINI_API_KEY (isolating public visitors from owner quotas).
+ *    - Uses PROD_GUEST_GEMINI_API_KEY_FREE (isolating public visitors from owner quotas).
  * 3. Role = 'owner' in Production:
- *    - Primary: GEMINI_API_KEY_FREE (free tier)
- *    - Failover: GEMINI_API_KEY_PRO (pro/paid backup) if free tier quota is exhausted or HTTP 429
+ *    - Primary: PROD_GEMINI_API_KEY_FREE (free tier)
+ *    - Failover: PROD_GEMINI_API_KEY_PRO (pro/paid backup) if free tier quota is exhausted or HTTP 429
+ *    - Fallback: GEMINI_API_KEY if production keys are not yet configured.
  */
 
 export interface KeyResolutionOptions {
@@ -24,7 +27,7 @@ const FAILOVER_COOLDOWN_MS = 60 * 60 * 1000; // 60 minutes cooldown
 
 export function triggerProFailover(): void {
   failoverActiveUntil = Date.now() + FAILOVER_COOLDOWN_MS;
-  console.warn(`[AI Key Resolver] Failover to GEMINI_API_KEY_PRO triggered. Active until ${new Date(failoverActiveUntil).toISOString()}`);
+  console.warn(`[AI Key Resolver] Failover to PROD_GEMINI_API_KEY_PRO triggered. Active until ${new Date(failoverActiveUntil).toISOString()}`);
 }
 
 export function isFailoverActive(): boolean {
@@ -45,10 +48,11 @@ export function resolveGeminiApiKey(options?: KeyResolutionOptions): {
     process.env.APP_ENV === "staging" ||
     process.env.APP_ENV === "development";
 
-  // 1. If in development or staging, prefer DEVELOPMENT_GEMINI_API_KEY
-  if (isDevOrStaging && process.env.DEVELOPMENT_GEMINI_API_KEY?.trim()) {
+  // 1. If in development or staging, prefer GEMINI_API_KEY (AI Studio secret) or legacy DEVELOPMENT_GEMINI_API_KEY
+  const devKey = process.env.GEMINI_API_KEY?.trim() || process.env.DEVELOPMENT_GEMINI_API_KEY?.trim();
+  if (isDevOrStaging && devKey) {
     return {
-      apiKey: process.env.DEVELOPMENT_GEMINI_API_KEY.trim(),
+      apiKey: devKey,
       tier: "development",
       failoverActive: false,
     };
@@ -56,36 +60,49 @@ export function resolveGeminiApiKey(options?: KeyResolutionOptions): {
 
   // 2. If guest role
   if (options?.role === "guest") {
-    const guestKey = process.env.GUEST_GEMINI_API_KEY?.trim();
+    const guestKey =
+      process.env.PROD_GUEST_GEMINI_API_KEY_FREE?.trim() ||
+      process.env.GUEST_GEMINI_API_KEY?.trim();
     if (guestKey) {
       return { apiKey: guestKey, tier: "guest", failoverActive: false };
     }
     return { apiKey: undefined, tier: "none", failoverActive: false };
   }
 
-  // 3. Owner role (Production or dev fallback when DEVELOPMENT_GEMINI_API_KEY is not set)
+  // 3. Owner role (Production or dev fallback when GEMINI_API_KEY is not set)
   const failoverEngaged = options?.preferProBackup || isFailoverActive();
+  const proKey = process.env.PROD_GEMINI_API_KEY_PRO?.trim() || process.env.GEMINI_API_KEY_PRO?.trim();
+  const freeKey = process.env.PROD_GEMINI_API_KEY_FREE?.trim() || process.env.GEMINI_API_KEY_FREE?.trim();
 
-  if (failoverEngaged && process.env.GEMINI_API_KEY_PRO?.trim()) {
+  if (failoverEngaged && proKey) {
     return {
-      apiKey: process.env.GEMINI_API_KEY_PRO.trim(),
+      apiKey: proKey,
       tier: "owner_pro",
       failoverActive: true,
     };
   }
 
-  if (process.env.GEMINI_API_KEY_FREE?.trim()) {
+  if (freeKey) {
     return {
-      apiKey: process.env.GEMINI_API_KEY_FREE.trim(),
+      apiKey: freeKey,
       tier: "owner_free",
       failoverActive: false,
     };
   }
 
-  if (process.env.GEMINI_API_KEY_PRO?.trim()) {
+  if (proKey) {
     return {
-      apiKey: process.env.GEMINI_API_KEY_PRO.trim(),
+      apiKey: proKey,
       tier: "owner_pro",
+      failoverActive: false,
+    };
+  }
+
+  // Fallback to GEMINI_API_KEY even in production if PROD_* keys are not yet configured
+  if (process.env.GEMINI_API_KEY?.trim()) {
+    return {
+      apiKey: process.env.GEMINI_API_KEY.trim(),
+      tier: "development",
       failoverActive: false,
     };
   }

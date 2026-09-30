@@ -1,10 +1,11 @@
 import { JobPostingRepository } from "./repository-interface";
 import { PostgresJobRepository } from "./postgres-repository";
 import { FileJobRepository } from "./file-repository";
-import { getDatabasePool } from "./connection";
+import { getDatabasePool, isDbConnected } from "./connection";
 
 let activeRepository: JobPostingRepository | null = null;
 let activeEngine: "postgres" | "file" = "file";
+let postgresAttemptFailed = false;
 
 export function getRepository(): { repository: JobPostingRepository; engine: "postgres" | "file" } {
   if (activeRepository) {
@@ -12,13 +13,14 @@ export function getRepository(): { repository: JobPostingRepository; engine: "po
   }
 
   const pool = getDatabasePool();
-  if (pool) {
+  if (pool && !postgresAttemptFailed && isDbConnected()) {
     try {
       activeRepository = new PostgresJobRepository(pool);
       activeEngine = "postgres";
       console.log("[Persistence] Active repository: PostgreSQL");
       return { repository: activeRepository, engine: "postgres" };
     } catch (err) {
+      postgresAttemptFailed = true;
       console.warn("[Persistence] Failed initializing Postgres repository, falling back to local file store:", err);
     }
   }

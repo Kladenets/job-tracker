@@ -15,17 +15,18 @@ export interface FitClassifier {
 }
 
 /**
- * Creates the normalized, concise payload sent to JEV.
- * Raw web boilerplate is excluded to maintain consistent confidence scores.
+ * Creates the concise state context sent to TypeSafe System One.
  */
 export function buildJevInputPayload(posting: UnifiedJobPosting, profile: SearchProfile) {
   const candidate = profile.candidate;
 
   return {
-    candidateSummary: {
+    candidateProfile: {
       targetTitles: candidate.targetTitles,
       skills: candidate.skills,
       requiresSponsorship: candidate.requiresSponsorship,
+      hasSecurityClearance: candidate.hasSecurityClearance,
+      targetLocation: profile.discovery.targetLocation,
     },
     jobPosting: {
       title: posting.title,
@@ -37,16 +38,13 @@ export function buildJevInputPayload(posting: UnifiedJobPosting, profile: Search
         ? `$${posting.salary_min_annual.toLocaleString()} - $${(posting.salary_max_annual || posting.salary_min_annual).toLocaleString()} ${posting.currency}`
         : "unknown / unstated",
       detectedTechnologies: posting.crawler_data?.detected_technologies || [],
-      // Clean description summary (truncated to avoid noise)
       descriptionSummary: posting.description_text.slice(0, 1500),
     },
-    question: "Is this job a good fit for this candidate based on their profile, skills, and search criteria?",
   };
 }
 
 /**
- * Simulation / Fallback Classifier for local testing and offline operation
- * when TypeSafe AI signups are paused or API credentials are not set.
+ * Simulation / Fallback Classifier for local testing and offline operation.
  */
 export class SimulatedJevClassifier implements FitClassifier {
   async classify(posting: UnifiedJobPosting, profile?: SearchProfile): Promise<JevFitDecision> {
@@ -58,110 +56,95 @@ export class SimulatedJevClassifier implements FitClassifier {
     const matchedSkills = detectedTech.filter((t) => candidateSkills.has(t));
 
     const titleLower = posting.title.toLowerCase();
-    const titleMatches = activeProfile.candidate.targetTitles.some((t) =>
+    const titleMatch = activeProfile.candidate.targetTitles.some((t) =>
       titleLower.includes(t.toLowerCase())
     );
 
-    // Calculate simulated confidence
-    let baseConfidence = 0.50;
+    let confidence = 0.5;
+    if (titleMatch) confidence += 0.25;
+    if (matchedSkills.length > 0) confidence += Math.min(0.25, matchedSkills.length * 0.08);
 
-    // Tech overlap adds confidence
-    if (matchedSkills.length >= 3) {
-      baseConfidence += 0.25;
-    } else if (matchedSkills.length >= 1) {
-      baseConfidence += 0.15;
-    }
-
-    // Target title alignment adds confidence
-    if (titleMatches) {
-      baseConfidence += 0.15;
-    }
-
-    // Workplace alignment
-    if (posting.workplace_type === "remote" || posting.workplace_type === "hybrid") {
-      baseConfidence += 0.05;
-    }
-
-    // Missing salary slightly affects confidence as unknown
-    if (!posting.salary_min_annual) {
-      baseConfidence -= 0.05;
-    }
-
-    const confidence = Math.min(0.98, Math.max(0.20, Number(baseConfidence.toFixed(2))));
-    const fit = confidence >= 0.65;
-
-    const latencyMs = Date.now() - startTime;
+    confidence = Math.min(0.99, Math.max(0.1, confidence));
+    const threshold = activeProfile.jevScreening.minConfidenceRecommend ?? 0.70;
+    const fit = confidence >= threshold;
 
     return {
       fit,
-      confidence,
+      confidence: Number(confidence.toFixed(2)),
       reason: fit
-        ? `Strong candidate alignment on skills (${matchedSkills.slice(0, 4).join(", ") || "software engineering"}) and title relevance.`
-        : `Moderate overlap; missing key preferred skills or title divergence.`,
+        ? `Strong candidate alignment on skills (${matchedSkills.join(", ") || "core match"}) and title relevance.`
+        : `Insufficient skill/title overlap for screening threshold ${threshold}`,
       model: "jev-simulated-system-1",
-      latencyMs,
+      latencyMs: Date.now() - startTime,
     };
   }
 }
 
 /**
- * Live TypeSafe AI (JEV) Classifier
- * Makes real HTTP call to TypeSafe AI if API key is provided,
- * falling back gracefully to SimulatedJevClassifier if unavailable or during platform pause.
+ * Production TypeSafe AI System One Classifier
+ * Evaluates candidate fit via POST /v1/systemone using the native 'noul' probability primitive.
  */
 export class TypeSafeJevClassifier implements FitClassifier {
-  private fallback: SimulatedJevClassifier = new SimulatedJevClassifier();
-  private apiKey: string | undefined;
-  private endpoint: string;
-
-  constructor() {
-    this.apiKey = process.env.TYPESAFE_API_KEY;
-    this.endpoint = process.env.TYPESAFE_API_ENDPOINT || "https://api.typesafe.ai/v1/noul";
-  }
+  private fallback = new SimulatedJevClassifier();
 
   async classify(posting: UnifiedJobPosting, profile?: SearchProfile): Promise<JevFitDecision> {
     const activeProfile = profile || loadSearchProfile();
+    const apiKey = (process.env.TYPESAFE_API_KEY || process.env.TYPESAFE_AI_API_KEY || "").trim();
+    let endpoint = (process.env.TYPESAFE_API_ENDPOINT || "https://api.typesafe.ai/v1/systemone").trim();
+    if (endpoint.endsWith("/v1/noul") || endpoint.endsWith("/noul")) {
+      endpoint = endpoint.replace(/\/noul$/, "/systemone");
+    }
 
-    if (!this.apiKey) {
-      // Graceful fallback during platform signup pause
+    if (!apiKey) {
       return this.fallback.classify(posting, activeProfile);
     }
 
     const startTime = Date.now();
     const payload = buildJevInputPayload(posting, activeProfile);
+    const model = activeProfile.jevScreening.model === "jev-system-1" ? "jev-latest" : (activeProfile.jevScreening.model || "jev-latest");
 
     try {
-      const response = await fetch(this.endpoint, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: activeProfile.jevScreening.model || "jev-system-1",
-          question: payload.question,
-          context: payload,
-          format: "boolean_confidence",
+          model,
+          state: payload,
+          questions: {
+            is_job_fit: {
+              type: "noul",
+              instructions: "Is this job posting a strong qualification and career fit for this candidate based on their skills, target roles, and location preferences?",
+            },
+          },
         }),
       });
 
       if (!response.ok) {
-        console.warn(`[TypeSafe JEV] API returned ${response.status}, falling back to simulator`);
+        const errText = await response.text();
+        console.warn(`[TypeSafe JEV] API returned ${response.status}: ${errText}, falling back to simulator`);
         return this.fallback.classify(posting, activeProfile);
       }
 
       const data: any = await response.json();
       const latencyMs = Date.now() - startTime;
+      const noulProbability = Number(data.answers?.is_job_fit?.noul ?? 0.5);
+      const threshold = activeProfile.jevScreening.minConfidenceRecommend || 0.70;
+      const fit = noulProbability >= threshold;
 
       return {
-        fit: Boolean(data.result ?? data.fit),
-        confidence: Number(data.confidence ?? 0.8),
-        reason: data.reason || "Evaluated via TypeSafe AI JEV noul",
-        model: data.model || "jev-system-1",
+        fit,
+        confidence: Number(noulProbability.toFixed(2)),
+        reason: fit
+          ? `Qualified with ${(noulProbability * 100).toFixed(0)}% JEV confidence score (meets >= ${(threshold * 100).toFixed(0)}% threshold).`
+          : `Marginal fit with ${(noulProbability * 100).toFixed(0)}% JEV confidence score (below ${(threshold * 100).toFixed(0)}% threshold).`,
+        model: data.model || model,
         latencyMs,
       };
     } catch (err) {
-      console.warn("[TypeSafe JEV] Request error, falling back to simulator:", err);
+      console.warn("[TypeSafe JEV] Network error, falling back to simulator:", err);
       return this.fallback.classify(posting, activeProfile);
     }
   }

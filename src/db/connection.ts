@@ -5,10 +5,11 @@ dotenv.config();
 
 let pool: Pool | null = null;
 let isConnected = false;
+let failedConnection = false;
 
 export function getDatabasePool(): Pool | null {
   const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
+  if (!databaseUrl || failedConnection) {
     return null;
   }
 
@@ -17,7 +18,7 @@ export function getDatabasePool(): Pool | null {
       connectionString: databaseUrl,
       max: 10,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 2000,
       ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined,
     };
 
@@ -26,10 +27,17 @@ export function getDatabasePool(): Pool | null {
     pool.on("error", (err) => {
       console.error("[PostgreSQL Pool Error]", err);
       isConnected = false;
+      failedConnection = true;
     });
   }
 
   return pool;
+}
+
+export function markDatabaseConnectionFailed(): void {
+  failedConnection = true;
+  isConnected = false;
+  pool = null;
 }
 
 export async function checkDatabaseConnection(): Promise<{
