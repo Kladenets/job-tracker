@@ -122,7 +122,7 @@ export class GeminiAgent {
         msg.includes("quota");
 
       if (isRateLimit && !isFailoverActive()) {
-        console.warn("[GeminiAgent] HTTP 429 / Quota exhaustion detected on primary tier. Triggering failover to GEMINI_API_KEY_PRO.");
+        console.warn("[GeminiAgent] HTTP 429 / Quota exhaustion detected on primary tier. Triggering failover to PROD_GEMINI_API_KEY_PRO.");
         triggerProFailover();
       }
 

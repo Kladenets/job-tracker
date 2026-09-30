@@ -18,39 +18,41 @@ The system enforces a dual-role access boundary:
    - Strictly **read-only**: Guests can browse, search, and filter job postings (`/api/jobs`), view sanitized job details (`/api/jobs/:id`), and test the conversational AI assistant.
    - All mutations (`POST`, `PUT`, `PATCH`, `DELETE`) from guests are rejected with `403 Forbidden`.
    - Personal candidate information (real resume, personal interview notes, active application stages, private conversion rates) is completely redacted or restricted.
-   - Guest AI queries are strictly powered by an isolated `GUEST_GEMINI_API_KEY` to guarantee public usage cannot exhaust the owner's primary API quota.
+   - Guest AI queries are strictly powered by an isolated `PROD_GUEST_GEMINI_API_KEY_FREE` to guarantee public usage cannot exhaust the owner's primary API quota.
 
 ## Generative AI API Token Strategy & Failover Architecture
 
 To optimize operating costs, protect against quota exhaustion, and isolate public visitors:
 
 ### 1. Token Hierarchy & Environment Isolation
-- **`DEVELOPMENT_GEMINI_API_KEY` (Development & Staging Tier):**
+- **`GEMINI_API_KEY` (Development & Staging Tier):**
+  - Standard Google AI Studio secret name.
   - Preferred in all non-production environments (`NODE_ENV !== "production"` or `APP_ENV === "staging" | "development"`).
   - Used for local debugging, unit/integration tests, and staging validation, completely insulating production quotas.
-- **`GUEST_GEMINI_API_KEY` (Public Guest Portfolio Tier):**
+- **`PROD_GUEST_GEMINI_API_KEY_FREE` (Production Public Guest Portfolio Tier):**
   - Dedicated key for unauthenticated public visitors trying the AI assistant on job detail pages.
   - Quota exhaustion on this key affects only public visitors and never halts owner analysis or background jobs.
   - Guest prompts run with a generic synthetic candidate persona (e.g. *"Senior Software Engineer"*), completely isolating the owner's real resume and contact information.
-- **`GEMINI_API_KEY_FREE` (Production Owner Primary - Free):**
+- **`PROD_GEMINI_API_KEY_FREE` (Production Owner Primary - Free Tier):**
   - The default key used for owner operations in production at zero operating cost.
-- **`GEMINI_API_KEY_PRO` (Production Owner Backup - Paid):**
+- **`PROD_GEMINI_API_KEY_PRO` (Production Owner Backup - Paid Tier):**
   - High-quota paid/Pay-As-You-Go Google AI Studio token.
-  - Automatically activated if `GEMINI_API_KEY_FREE` returns HTTP 429 (Resource Exhausted / Rate Limit Exceeded) or fails a session rate-limit pre-flight probe.
+  - Automatically activated if `PROD_GEMINI_API_KEY_FREE` returns HTTP 429 (Resource Exhausted / Rate Limit Exceeded) or fails a session rate-limit pre-flight probe.
 
 ### 2. Server-Side Key Resolution Precedence & Fallback
 The server resolves keys deterministically without exposing them to the client:
-1. **Development/Staging Check:** If environment is development or staging and `DEVELOPMENT_GEMINI_API_KEY` is present, resolve `DEVELOPMENT_GEMINI_API_KEY` (`tier: "development"`).
-2. **Guest Role Check:** If the request originates from a guest session (`role = 'guest'`), resolve `GUEST_GEMINI_API_KEY` (`tier: "guest"`). If absent, fall back to offline simulation (`tier: "none"`).
+1. **Development/Staging Check:** If environment is development or staging and `GEMINI_API_KEY` is present, resolve `GEMINI_API_KEY` (`tier: "development"`).
+2. **Guest Role Check:** If the request originates from a guest session (`role = 'guest'`), resolve `PROD_GUEST_GEMINI_API_KEY_FREE` (`tier: "guest"`). If absent, fall back to offline simulation (`tier: "none"`).
 3. **Production Owner Check:** If `role = 'owner'` in production:
-   - If pro backup is preferred or active failover is engaged: resolve `GEMINI_API_KEY_PRO` (`tier: "owner_pro"`).
-   - Otherwise, resolve primary `GEMINI_API_KEY_FREE` (`tier: "owner_free"`).
-   - If `GEMINI_API_KEY_FREE` is exhausted or absent, automatically resolve `GEMINI_API_KEY_PRO` (`tier: "owner_pro"`).
+   - If pro backup is preferred or active failover is engaged: resolve `PROD_GEMINI_API_KEY_PRO` (`tier: "owner_pro"`).
+   - Otherwise, resolve primary `PROD_GEMINI_API_KEY_FREE` (`tier: "owner_free"`).
+   - If `PROD_GEMINI_API_KEY_FREE` is exhausted or absent, automatically resolve `PROD_GEMINI_API_KEY_PRO` (`tier: "owner_pro"`).
+   - If neither production key is set, fall back to `GEMINI_API_KEY` (`tier: "development"`).
 4. **Offline Resilient Mode:** If no valid key resolves for the requested role/environment, the server executes deterministic offline simulation (`tier: "none"`), ensuring that neither interactive agents nor background triage crash.
 
 ### 3. Failover Execution & Session State Tracking
-- **Failover Trigger:** When an active call to Gemini using `GEMINI_API_KEY_FREE` returns HTTP 429 (Rate Limit Exceeded / Quota Exhausted), the server catches the status, immediately switches the active owner provider session to `GEMINI_API_KEY_PRO`, and replays or continues the agent turn seamlessly.
-- **Cooldown & Reset:** The failover state remains active for the remainder of the session or until a backoff period resets (default: 60 minutes), after which the system probes `GEMINI_API_KEY_FREE` again.
+- **Failover Trigger:** When an active call to Gemini using `PROD_GEMINI_API_KEY_FREE` returns HTTP 429 (Rate Limit Exceeded / Quota Exhausted), the server catches the status, immediately switches the active owner provider session to `PROD_GEMINI_API_KEY_PRO`, and replays or continues the agent turn seamlessly.
+- **Cooldown & Reset:** The failover state remains active for the remainder of the session or until a backoff period resets (default: 60 minutes), after which the system probes `PROD_GEMINI_API_KEY_FREE` again.
 - **Telemetry Exposure:** The resolved tier name (`development`, `owner_free`, `owner_pro`, `guest`, `none`) and failover status are exposed to the client via `/api/health` and conversational responses, allowing the UI to render appropriate telemetry badges without ever leaking raw tokens.
 
 ## Perimeter Architecture (Zero Trust Edge)
