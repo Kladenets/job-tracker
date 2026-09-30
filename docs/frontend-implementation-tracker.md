@@ -5,8 +5,8 @@
 | Chunk | Module / Scope | Status | Deliverables / Notes |
 |:---:|---|:---:|---|
 | **1** | **Infrastructure & Design System Foundation** | ✅ **COMPLETE** | Vite + React 19 + Tailwind, CSS design tokens (`--surface-*`, `--status-*`), theme toggle, Express serving |
-| **2** | **Root Shell, TanStack Router & Persistent Layout** | ⏳ **NEXT UP** | `__root.tsx`, 2-state sidebar rail (14rem $\leftrightarrow$ 3.75rem), mobile bottom bar, zero-reload nav |
-| **3** | **Persistent Right AI Assistant Dock & Store** | ⏳ Pending | Docked 24rem pane (`Cmd+K`), React Motion spring, Zustand store, unmounting-free streaming continuity |
+| **2** | **Root Shell, TanStack Router & Persistent Layout** | ✅ **COMPLETE** | `__root.tsx`, 2-state sidebar rail (14rem $\leftrightarrow$ 3.75rem), mobile bottom bar, zero-reload nav |
+| **3** | **Persistent Right AI Assistant Dock & Store** | ⏳ **NEXT UP** | Docked 24rem pane (`Cmd+K`), React Motion spring, Zustand store, unmounting-free streaming continuity |
 | **4** | **Recommendation Inbox (`/inbox`) & Job Cards** | ⏳ Pending | Sticky filter bar, 2-tier card, SVG arc ring, zero-pill typography, `@container`, keyboard triage (`j`/`k`/`s`/`x`) |
 | **5** | **Application Tracking Board (`/applications`)** | ⏳ Pending | Kanban + Table view, spring card transitions, interview notes drawer, stage history timeline |
 | **6** | **Metrics & Funnel Dashboard (`/dashboard`)** | ⏳ Pending | Date range filter, monospace metrics, conversion rates, small-sample indicators (`N < 10`) |
