@@ -738,9 +738,38 @@ app.get("/api/sources/jobspy/test", async (req: Request, res: Response) => {
 });
 
 if (require.main === module) {
-  app.listen(port, host, () => {
-    console.log(`[Job Tracker Server] Listening on http://${host}:${port}`);
-  });
+  const startServer = async () => {
+    // If running in development with Vite or production with built static files
+    const isProd = process.env.NODE_ENV === "production";
+    const clientDistPath = path.join(process.cwd(), "dist", "client");
+
+    if (isProd && fs.existsSync(clientDistPath)) {
+      app.use(express.static(clientDistPath));
+      app.get("*", (req: Request, res: Response, next) => {
+        if (req.path.startsWith("/api")) return next();
+        return res.sendFile(path.join(clientDistPath, "index.html"));
+      });
+    } else {
+      try {
+        // Dynamic import to prevent CommonJS typescript resolution error
+        const viteModulePath = "vite";
+        const { createServer: createViteServer } = await (eval(`import("${viteModulePath}")`) as Promise<any>);
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } catch (err) {
+        console.warn("[Job Tracker Server] Vite dev middleware not attached:", err);
+      }
+    }
+
+    app.listen(port, host, () => {
+      console.log(`[Job Tracker Server] Listening on http://${host}:${port}`);
+    });
+  };
+
+  startServer();
 }
 
 export default app;
