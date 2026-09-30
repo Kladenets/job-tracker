@@ -13,13 +13,16 @@
   6. `offer` (Offer Received)
   7. `rejected` (Company Rejection)
   8. `withdrawn` / `inactive` (Archived)
+- **Spring Animations:** Cards moving between stages use React Motion spring physics (`stiffness: 220, damping: 24`) for fluid column transitions.
+- **In-Page Sticky Filter Bar:** Quick search (`/`), stage filter segment (`Active` | `Archived`), and sorting.
 
 ### 1.2 Application Card & Row Elements
 - Company name and job title (with link to internal job detail view).
 - Current stage indicator.
-- Applied date (formatted nicely with relative days e.g., "5 days ago").
+- Applied date (formatted nicely with relative days e.g., "5 days ago", tabular monospace).
 - Next Action Date badge (highlighted yellow if due soon, red if overdue).
 - Quick access to user interview notes and external application URL.
+- **Micro Container Queries:** Cards adapt internal layout based on column width (`@container`).
 
 ### 1.3 Stage Transition & Audit Logging
 - Dragging a card between columns or selecting a new stage from a dropdown:
