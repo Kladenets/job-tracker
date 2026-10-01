@@ -4,6 +4,7 @@ import { SidebarRail } from "./sidebar-rail";
 import { MobileNavBar } from "./mobile-nav";
 import { MobileTopHeader } from "./mobile-top-header";
 import { ShortcutHelpModal } from "./shortcut-modal";
+import { AIDock } from "./ai-dock";
 
 export function RootLayout() {
   return (
@@ -21,10 +22,13 @@ export function RootLayout() {
         <Outlet />
       </main>
 
-      {/* 3. Mobile Bottom Navigation (<768px viewports) */}
+      {/* 3. Persistent Right AI Assistant Dock (Zero unmount, streaming continuity across routes) */}
+      <AIDock />
+
+      {/* 4. Mobile Bottom Navigation (<768px viewports) */}
       <MobileNavBar />
 
-      {/* 4. Global Modals (Shortcuts help, accessible from anywhere via '?') */}
+      {/* 5. Global Modals (Shortcuts help, accessible from anywhere via '?') */}
       <ShortcutHelpModal />
     </div>
   );

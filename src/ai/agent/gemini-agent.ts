@@ -272,6 +272,44 @@ export class GeminiAgent {
     const executedTraces: ToolCallExecution[] = [];
     let replyText = "";
 
+    // Autonomous naming check: If conversation title is default or empty, name it dynamically
+    if (conversation.title === "New Conversation" || conversation.title.trim().length === 0) {
+      const nameTool = this.#tools.find((t) => t.name === "name_conversation");
+      if (nameTool) {
+        let proposedTitle = "General Career Inquiry";
+        if (conversation.job_ids.length > 0) {
+          const firstJob = await context.repository.getById(conversation.job_ids[0]);
+          if (firstJob) {
+            proposedTitle = `${firstJob.company}: ${firstJob.title.slice(0, 24)}...`;
+          }
+        } else if (lower.includes("cover letter")) {
+          proposedTitle = "Cover Letter Drafting";
+        } else if (lower.includes("interview") || lower.includes("prep")) {
+          proposedTitle = "Interview Preparation";
+        } else if (lower.includes("search") || lower.includes("find")) {
+          proposedTitle = "Job Search Discovery";
+        } else {
+          // Extract first 4-5 words of the prompt
+          const words = prompt.trim().split(/\s+/).slice(0, 5).join(" ");
+          proposedTitle = words.length > 3 ? `${words}...` : "Career Consultation";
+        }
+
+        const rawNameRes = await nameTool.execute({ title: proposedTitle }, context);
+        try {
+          const parsedName = JSON.parse(rawNameRes);
+          executedTraces.push({
+            call_id: `call-name-${Date.now()}`,
+            name: "name_conversation",
+            arguments: { title: proposedTitle },
+            result: parsedName,
+            is_error: false,
+          });
+        } catch {
+          // ignore naming json parse error
+        }
+      }
+    }
+
     // If asking about a job or search
     if (lower.includes("search") || lower.includes("find")) {
       const searchTool = this.#tools.find((t) => t.name === "search_saved_jobs");

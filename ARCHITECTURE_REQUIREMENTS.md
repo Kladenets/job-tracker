@@ -46,6 +46,17 @@ The Job Tracker web client provides a high-density, keyboard-first, auditable co
   - Sticky filter bars must split into a two-tier layout (Search + counter on top, scrollable segments and filters below).
   - Job preview cards, audit summaries, and action button groups must use `flex-col sm:flex-row` with `break-words` and `min-w-0` to prevent horizontal clipping down to `360px` screens.
 
+### E. AI Assistant Dock & Multi-Conversation Viewport Contract
+- **Inner Shell Locking:** The AI Assistant dock must lock all internal components into a fixed `384px` container (`w-[90vw] sm:w-[24rem] xl:w-[24rem] shrink-0`). Internal typography and containers must never dynamically wrap or shift width during slide-open/close transitions.
+- **Two-Level Viewport Navigation:**
+  - `View 1: Directory`: Displays conversation cards, auto-generated names, last message snippet, job context pills with full-title tooltips, and deletion controls.
+  - `View 2: Chat Thread`: Accessible by clicking any conversation card or triggering a new session; includes back navigation arrow, message feed, active job context, and message input.
+- **Persistent Viewport Memory:** Closing the dock preserves both `dockView` and `activeConversationId`. Reopening returns the user to the exact view where they left off.
+- **Split Top-Bar Trigger (`AITopBarButton`):**
+  - Left button: Toggles dock open/closed preserving view memory, displays semantic status badge (🟢 / 🟠).
+  - Right button: Quick-new spawn (`+`), opens dock directly into a clean chat thread (`View 2`).
+- **"Ask AI" Trigger Contract:** Clicking "Ask AI" on any job card always spawns a new conversation tagged with the target job context.
+
 ---
 
 ## 3. Keyboard Shortcuts Contract

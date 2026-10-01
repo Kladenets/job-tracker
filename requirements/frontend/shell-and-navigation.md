@@ -75,15 +75,38 @@ All active filter state is bidirectionally serialized into URL search parameters
 
 ---
 
-## 5. Right AI Assistant Dock Specification
+## 5. Right AI Assistant Dock & Multi-Conversation Architecture
 
-### 5.1 Docking & Sizing Behavior
-- **Desktop ($\ge 1280\text{px}$):** Persistent docked pane (~24rem / 384px wide). When toggled open via `Cmd+K` or `c`, the center workspace adjusts smoothly via CSS Grid (`grid-template-columns: auto 1fr auto`).
-- **Sub-1280px Viewports:** Automatically converts from a docked split pane into an overlay sheet with backdrop blur.
-- **Spring Physics:** Opening and closing uses React Motion (`stiffness: 220, damping: 24`).
+### 5.1 Docking, Viewport & Sizing Stability
+- **Desktop ($\ge 1280\text{px}$):** Persistent docked pane (~24rem / 384px wide). When toggled open via `Cmd+K`, `c`, or the top-bar button, the center workspace adjusts smoothly.
+- **Sub-1280px Viewports:** Automatically converts from a docked split pane into an overlay drawer with backdrop blur.
+- **Spatial Anchoring & Anti-Reflow:** All internal chat feeds, conversation cards, and headers are locked to an inner fixed-width shell (`384px`), completely eliminating text reflow and wrapping jitter during slide transitions.
 
-### 5.2 Context Synchronization
-- **Active Job Focus:** Clicking "Ask AI" on any job card or focusing a job updates `activeJobId` in client state.
-- **Context Header:** Displays `📌 Context: <Job Title> @ <Company>`.
-- The assistant automatically includes the active job posting and user resume in prompt context.
-- Can be dismissed via `Cmd+K`, the header close button, or `Esc`.
+### 5.2 Two-Level Viewport Navigation
+- **View 1: Conversation Directory (`dockView = 'list'`):**
+  - Displays all saved conversations sorted by `updated_at DESC`.
+  - Conversation card displays:
+    - Automatically assigned topic title (or fallback) + relative timestamp.
+    - Last turn snippet preview.
+    - **Tagged Job Pills:** Mini pills displaying jobs referenced in the thread (e.g. `[Stripe: Sr. Staff...]`), truncating cleanly with a full tooltip on hover.
+    - Conversation deletion control.
+  - Top header: "AI Conversations" with `+ New Chat` action button and search bar.
+- **View 2: Active Chat Thread (`dockView = 'chat'`):**
+  - Smooth slide transition into the active conversation.
+  - Header: `< Back` navigation arrow returning to the Directory + active title + `+ New Chat` quick button + close `X`.
+  - Active job context banner (if pinned/tagged).
+  - Streaming token feed, contextual quick prompts, and input box.
+
+### 5.3 State & Viewport Memory
+- **Persistent Memory:** The dock state remembers:
+  - `isOpen: boolean`
+  - `dockView: 'list' | 'chat'` (if closed on the list view, reopening restores the list view).
+  - `activeConversationId: string | null` (if closed inside an active conversation, reopening restores that exact thread).
+- **Split AI Top-Bar Button:**
+  - **Left Half (Main Status Toggle):** Icon (`Sparkles`) with a semantic status circle badge (🟢 Solid Emerald = Ready; 🟠 Pulsing Amber = Generating/Streaming). Clicking toggles the dock open/closed preserving the remembered view.
+  - **Right Half (Quick-New Spawn):** Icon (`Plus`). Clicking immediately opens the dock and starts a fresh conversation in View 2 (`startNewConversation()`).
+
+### 5.4 Context Synchronization & "Ask AI" Contract
+- Clicking `"Ask AI"` on any job card in the Recommendation Inbox **always spawns a new conversation** initialized with that specific job's context and opens the chat thread directly.
+- The assistant automatically includes the active job posting and user candidate profile in its prompt context.
+- Can be dismissed via `Cmd+K`, `c`, the header close button, or `Esc`.
