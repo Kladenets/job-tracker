@@ -51,6 +51,7 @@ Task context must remain deliberate, inspectable, and bounded to prevent unbound
 - Suggest truthful resume emphasis or wording without inventing experience.
 - Reuse a prior approved answer only after adapting it to the current question and job.
 - Save generated content as an unapproved draft.
+- Automatically name conversations: evaluate the initial user intent and context to name the conversation with a descriptive 3-6 word topic title via the `name_conversation` tool.
 
 ## Restricted content
 

@@ -191,9 +191,10 @@ export function SidebarRail() {
 
       {/* Footer Controls */}
       <div className="border-t border-[var(--border-subtle)] p-2 space-y-2 overflow-hidden">
-        {/* AI Tier Badge */}
+        {/* AI Tier Telemetry Badge (Informational status, strictly non-actionable) */}
         <div
-          className={`h-9 flex items-center rounded-md bg-[var(--surface-sunken)]/70 border border-[var(--border-subtle)] overflow-hidden transition-[width] duration-300 ease-in-out ${
+          title="AI Engine: Free Tier (Zero-cost operational tier)"
+          className={`h-9 flex items-center rounded-md bg-[var(--surface-sunken)]/70 border border-[var(--border-subtle)] overflow-hidden transition-[width] duration-300 ease-in-out cursor-default select-none ${
             sidebarCollapsed ? "w-10" : "w-52"
           }`}
         >
@@ -231,7 +232,7 @@ export function SidebarRail() {
               onClick={toggleShortcutHelp}
               title="Keyboard Shortcuts (?)"
               aria-label="Keyboard Shortcuts"
-              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center justify-center h-9 w-10 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
             >
               <HelpCircle className="h-4 w-4" />
             </button>

@@ -4,6 +4,7 @@ import { AnalyzeQualificationFitTool } from "./analyze-qualification-fit.tool";
 import { DraftCoverLetterTool } from "./draft-cover-letter.tool";
 import { GenerateInterviewPrepTool } from "./generate-interview-prep.tool";
 import { SearchSavedJobsTool } from "./search-saved-jobs.tool";
+import { NameConversationTool } from "./name-conversation.tool";
 
 export {
   GetJobDetailsTool,
@@ -11,6 +12,7 @@ export {
   DraftCoverLetterTool,
   GenerateInterviewPrepTool,
   SearchSavedJobsTool,
+  NameConversationTool,
 };
 
 /**
@@ -23,5 +25,6 @@ export function createDefaultTools(): Tool[] {
     new DraftCoverLetterTool(),
     new GenerateInterviewPrepTool(),
     new SearchSavedJobsTool(),
+    new NameConversationTool(),
   ];
 }

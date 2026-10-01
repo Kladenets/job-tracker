@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Filter, Search, ArrowUpDown, Check, SlidersHorizontal } from "lucide-react";
+import { AITopBarButton } from "./ai-topbar-button";
 
 interface FilterBarProps {
   itemCount: number;
@@ -14,6 +15,7 @@ interface FilterBarProps {
   sortOptions?: { id: string; label: string }[];
   filterCount?: number;
   onToggleFilters?: () => void;
+  showAIButton?: boolean;
 }
 
 export function StickyFilterBar({
@@ -37,6 +39,7 @@ export function StickyFilterBar({
   ],
   filterCount = 0,
   onToggleFilters,
+  showAIButton = true,
 }: FilterBarProps) {
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -78,7 +81,7 @@ export function StickyFilterBar({
         </span>
       </div>
 
-      {/* Right Row on Mobile / Inline on Desktop: Segments + Filters + Sort */}
+      {/* Right Row on Mobile / Inline on Desktop: Segments + Filters + Sort + AI Assistant */}
       <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
         {/* Center: Segmented Quick Toggles */}
         <div className="flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-0.5 text-xs shrink-0">
@@ -138,6 +141,13 @@ export function StickyFilterBar({
             </select>
             <ArrowUpDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--text-muted)]" />
           </div>
+
+          {/* AI Assistant Button in Top Bar (with semantic status indicator circle) */}
+          {showAIButton && (
+            <div className="pl-1 border-l border-[var(--border-subtle)] hidden sm:block">
+              <AITopBarButton />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,11 +1,21 @@
 import React, { useState } from "react";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
 import { Sparkles, ExternalLink, Bookmark, Check, ShieldAlert, Cpu } from "lucide-react";
+import { useAIDockStore } from "../shell/ai-dock-store";
 
 export function InboxPage() {
   const [search, setSearch] = useState("");
   const [segment, setSegment] = useState("all");
   const [sort, setSort] = useState("fit_desc");
+  const { askAboutJob } = useAIDockStore();
+
+  const sampleJob = {
+    id: "job-stripe-001",
+    title: "Senior Staff Distributed Systems Engineer",
+    company: "Stripe",
+    location: "San Francisco, CA (Remote US)",
+    salary: "$185k – $225k",
+  };
 
   return (
     <div className="flex-1 flex flex-col min-h-full">
@@ -35,7 +45,7 @@ export function InboxPage() {
           </span>
         </div>
 
-        {/* Placeholder Job Card Mockup showcasing Tier 1 Scan Row */}
+        {/* Job Card Showcase with Ask AI Trigger */}
         <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 md:p-4 shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 md:gap-4">
             <div className="flex items-start gap-3 min-w-0">
@@ -46,19 +56,28 @@ export function InboxPage() {
               <div className="space-y-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <h3 className="font-bold text-xs md:text-sm text-[var(--text-primary)]">
-                    Senior Staff Distributed Systems Engineer
+                    {sampleJob.title}
                   </h3>
-                  <span className="text-xs text-[var(--text-muted)] font-normal">· Stripe</span>
+                  <span className="text-xs text-[var(--text-muted)] font-normal">· {sampleJob.company}</span>
                 </div>
                 {/* Zero-Pill Typography with middots */}
                 <p className="text-[11px] md:text-xs text-[var(--text-secondary)] font-mono-tabular break-words">
-                  San Francisco, CA (Remote US) · $185k – $225k · Posted 2d ago · Greenhouse
+                  {sampleJob.location} · {sampleJob.salary} · Posted 2d ago · Greenhouse
                 </p>
               </div>
             </div>
 
-            {/* Quick Triage Buttons */}
-            <div className="flex items-center gap-1.5 self-end sm:self-start shrink-0 pt-1 sm:pt-0">
+            {/* Quick Action Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-start shrink-0 pt-1 sm:pt-0">
+              <button
+                type="button"
+                onClick={() => askAboutJob(sampleJob)}
+                title="Ask AI about this job (⌘K)"
+                className="px-2.5 py-1 rounded border border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Ask AI</span>
+              </button>
               <button
                 type="button"
                 className="px-2.5 py-1 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-medium hover:bg-[var(--surface-sunken)] transition-colors cursor-pointer"

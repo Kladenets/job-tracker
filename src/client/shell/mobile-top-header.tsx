@@ -1,6 +1,7 @@
 import React from "react";
 import { Briefcase } from "lucide-react";
 import { ThemeToggle } from "../theme/theme-toggle";
+import { AITopBarButton } from "../components/ai-topbar-button";
 
 export function MobileTopHeader() {
   return (
@@ -14,7 +15,12 @@ export function MobileTopHeader() {
           DEV :3000
         </span>
       </div>
-      <ThemeToggle />
+
+      <div className="flex items-center gap-2">
+        {/* Split AI Assistant button with semantic status circle (Ready 🟢 / Generating 🟠) + Quick-New (+) */}
+        <AITopBarButton />
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

@@ -10,6 +10,7 @@ import {
   DraftCoverLetterTool,
   GenerateInterviewPrepTool,
   SearchSavedJobsTool,
+  NameConversationTool,
 } from "../tools";
 import { GeminiAgent } from "../gemini-agent";
 import { UnifiedJobPosting } from "../../../types/job-posting";
@@ -169,6 +170,14 @@ async function runAgentSuite() {
   assert(search.totalMatches >= 1, "search_saved_jobs should find seeded job");
   assert(search.jobs[0].company === "Acme Corp", "search_saved_jobs should return Acme Corp");
   console.log("✓ SearchSavedJobsTool successfully queried database");
+
+  // Tool F: NameConversationTool
+  const nameTool = new NameConversationTool();
+  const nameRaw = await nameTool.execute({ title: "Acme Distributed Systems Fit" }, context);
+  const nameRes = JSON.parse(nameRaw);
+  assert(nameRes.success === true, "name_conversation should succeed");
+  assert(conv.title === "Acme Distributed Systems Fit", "Conversation title must be updated");
+  console.log("✓ NameConversationTool successfully assigned descriptive conversation title");
 
   // 3. Test Agent Offline Resilience & Execution
   console.log("\n[Test 3] Testing GeminiAgent multi-turn execution and fallback resilience...");
