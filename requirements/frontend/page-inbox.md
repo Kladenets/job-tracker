@@ -2,11 +2,13 @@
 
 ## 1. Functional Requirements
 
-### 1.1 In-Page Sticky Filter Bar
-- **Sticky Header:** Renders directly inside the page viewport (`position: sticky; top: 0; z-index: 10`) with backdrop blur (`backdrop-filter: blur(8px)`).
-- **Search & Counter:** Clean search input with quick-focus shortcut `/`, 200ms debounce, and live count (`Showing 14 of 42 jobs`).
-- **Segmented Quick Toggles:** Instant toggle group for `All` | `Recommended (≥70%)` | `Marginal` | `Hidden`.
-- **Advanced Popover & Sort:** Sort dropdown (`Highest Fit`, `Newest`, `Salary`) and "Filters (n)" popover for secondary criteria (`Remote / Hybrid / Onsite`, `Missing Salary`, `Missing Location`, `Source Adapter`).
+### 1.1 In-Page Two-Tier Sticky Filter Bar
+- **Sticky Header:** Renders directly inside the page viewport (`position: sticky; top: 0; z-index: 10`) with backdrop blur (`backdrop-filter: blur(8px)`) and resilient multi-panel responsive wrapping.
+- **Row 1 (Full-Width Search & Global Controls):**
+  - Full-width search bar expanding to available viewport space with `/` quick-focus shortcut, 200ms debounce, clear `(X)` button, live count (`Showing 14 of 42 jobs`), background crawler sync button, and AI Assistant button.
+- **Row 2 (Touch-Scrollable Presets & Advanced Controls):**
+  - **Horizontal Touch-Scrollable Chips:** Smooth swipeable preset filter buttons (`All Active` | `High Fit ≥70%` | `Marginal` | `Saved` | `Dismissed`) with `overflow-x-auto`, `scrollbar-none`, and `touch-pan-x` ensuring zero text clipping or squishing on mobile (<768px) and split-dock viewports.
+  - **Secondary Controls:** "Filters (n)" popover button for secondary criteria (`Remote / Hybrid / Onsite`, `Missing Salary`, `Missing Location`, `Source Adapter`) and Sort dropdown (`Highest Fit`, `Newest Discovered`, `Salary`).
 - **TanStack URL Serialization:** Validated via Zod schema; shareable deep links.
 
 ### 1.2 Two-Tier Job Card Layout & Presentation
@@ -26,10 +28,12 @@
   - Accessible tooltips indicating keyboard shortcuts.
 
 #### Tier 2: Expanded In-Depth Drawer / Card (~12rem–16rem height)
-- Toggled via row click or `Space`/`Enter` key:
+- Toggled via row click, chevron, or `Space`/`Enter` key:
+  - **Fluid Height Accordion Animation:** Animated using CSS grid transition (`grid-rows-[0fr]` to `grid-rows-[1fr]`, `opacity-0` to `opacity-100`, `300ms ease-out`).
   - **Deterministic Rule Audit:** Clear check/cross breakdown of qualification rules (✅ Experience $\ge 6$ yrs, ✅ Remote US, ⚠️ Salary unlisted).
   - **Extracted Tech Keywords:** Monospace skills tags (`TypeScript`, `Distributed Systems`, `PostgreSQL`).
   - **Role Overview:** Clean snippet of core responsibilities.
+  - **Dismissed & Restore Actions:** Dismissed jobs in the Dismissed tab render with a `Restore` button (`RotateCcw`) to reinstate them back to the active recommendation queue (`job_status = 'discovered'`).
   - **Direct ATS Action:** Large primary button linking directly to verified `job_url_direct`.
 
 ### 1.3 Fast Triage Actions & Keyboard Ergonomics

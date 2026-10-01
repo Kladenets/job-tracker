@@ -10,10 +10,7 @@ export function DashboardPage() {
   return (
     <div className="flex-1 flex flex-col min-h-full">
       <StickyFilterBar
-        itemCount={4}
-        totalCount={4}
-        searchValue={search}
-        onSearchChange={setSearch}
+        showSearch={false}
         activeSegment={segment}
         onSegmentChange={setSegment}
         segments={[
@@ -22,9 +19,6 @@ export function DashboardPage() {
           { id: "90d", label: "90 Days" },
           { id: "all", label: "All Time" },
         ]}
-        sortValue={sort}
-        onSortChange={setSort}
-        sortOptions={[{ id: "default", label: "Standard View" }]}
       />
 
       <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4 md:space-y-6 flex-1">

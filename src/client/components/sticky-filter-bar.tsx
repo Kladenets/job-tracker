@@ -1,45 +1,53 @@
-import React, { useState } from "react";
-import { Filter, Search, ArrowUpDown, Check, SlidersHorizontal } from "lucide-react";
+import React from "react";
+import { Search, ArrowUpDown, SlidersHorizontal, RefreshCw, X } from "lucide-react";
 import { AITopBarButton } from "./ai-topbar-button";
 
 interface FilterBarProps {
-  itemCount: number;
-  totalCount: number;
-  searchValue: string;
-  onSearchChange: (value: string) => void;
+  itemCount?: number;
+  totalCount?: number;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  showSearch?: boolean;
   activeSegment: string;
   onSegmentChange: (segment: string) => void;
-  segments?: { id: string; label: string }[];
-  sortValue: string;
-  onSortChange: (sort: string) => void;
+  segments?: { id: string; label: string; count?: number }[];
+  sortValue?: string;
+  onSortChange?: (sort: string) => void;
   sortOptions?: { id: string; label: string }[];
   filterCount?: number;
   onToggleFilters?: () => void;
   showAIButton?: boolean;
+  onSync?: () => void;
+  isSyncing?: boolean;
+  rightControls?: React.ReactNode;
 }
 
 export function StickyFilterBar({
   itemCount,
   totalCount,
-  searchValue,
+  searchValue = "",
   onSearchChange,
+  searchPlaceholder = "Search roles, companies, tech stack...",
+  showSearch = true,
   activeSegment,
   onSegmentChange,
   segments = [
-    { id: "all", label: "All" },
+    { id: "all", label: "All Active" },
     { id: "recommended", label: "High Fit (≥70%)" },
     { id: "marginal", label: "Marginal" },
+    { id: "saved", label: "Saved" },
+    { id: "dismissed", label: "Dismissed" },
   ],
   sortValue,
   onSortChange,
-  sortOptions = [
-    { id: "fit_desc", label: "Highest Fit" },
-    { id: "date_desc", label: "Newest Discovered" },
-    { id: "salary_desc", label: "Salary" },
-  ],
+  sortOptions,
   filterCount = 0,
   onToggleFilters,
   showAIButton = true,
+  onSync,
+  isSyncing = false,
+  rightControls,
 }: FilterBarProps) {
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -59,65 +67,144 @@ export function StickyFilterBar({
   }, []);
 
   return (
-    <div className="sticky top-0 z-10 w-full border-b border-[var(--border-subtle)] bg-[var(--surface-base)]/85 backdrop-blur-md px-3 md:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 md:gap-3 md:h-13 shrink-0">
-      {/* Left: Search with / shortcut + Count badge */}
-      <div className="flex items-center gap-2 md:gap-3 w-full sm:flex-1 sm:max-w-md">
-        <div className="relative w-full">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-muted)]" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search jobs, companies, skills..."
-            className="w-full pl-8 pr-7 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-          />
-          <kbd className="hidden sm:inline-block absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[10px] font-mono-tabular text-[var(--text-muted)]">
-            /
-          </kbd>
-        </div>
-        <span className="text-xs font-mono-tabular text-[var(--text-muted)] whitespace-nowrap shrink-0">
-          {itemCount}/{totalCount}
-        </span>
-      </div>
+    <div
+      data-testid="sticky-filter-bar"
+      className="sticky top-0 z-10 w-full border-b border-[var(--border-subtle)] bg-[var(--surface-base)]/90 backdrop-blur-md px-3 md:px-5 py-2 space-y-2 shrink-0 transition-all"
+    >
+      {/* ========================================================================= */}
+      {/* ROW 1: FULL-WIDTH SEARCH & SYSTEM CONTROLS                                */}
+      {/* ========================================================================= */}
+      {(showSearch || onSync || showAIButton || rightControls) && (
+        <div className="flex items-center justify-between gap-2 md:gap-3 w-full">
+          {/* Search Bar - Expands to available space if enabled */}
+          {showSearch ? (
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-muted)] pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchValue}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                className="w-full pl-8.5 pr-14 py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] transition-colors h-8.5 md:h-9"
+              />
+              {searchValue ? (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange?.("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <kbd className="hidden sm:inline-block absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[10px] font-mono-tabular text-[var(--text-muted)] pointer-events-none">
+                  /
+                </kbd>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
 
-      {/* Right Row on Mobile / Inline on Desktop: Segments + Filters + Sort + AI Assistant */}
-      <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-        {/* Center: Segmented Quick Toggles */}
-        <div className="flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-0.5 text-xs shrink-0">
-          {segments.map((seg) => {
-            const isSelected = activeSegment === seg.id;
-            return (
-              <button
-                key={seg.id}
-                type="button"
-                onClick={() => onSegmentChange(seg.id)}
-                className={`px-2 md:px-3 py-1 rounded-sm font-medium transition-colors cursor-pointer text-[11px] md:text-xs whitespace-nowrap ${
-                  isSelected
-                    ? "bg-[var(--surface-base)] text-[var(--text-primary)] shadow-xs font-semibold"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                {seg.label}
-              </button>
-            );
-          })}
+          {/* Live Counter Badge */}
+          {itemCount !== undefined && totalCount !== undefined && (
+            <span className="text-xs font-mono-tabular text-[var(--text-muted)] whitespace-nowrap shrink-0 hidden sm:inline-block">
+              Showing <span className="font-semibold text-[var(--text-primary)]">{itemCount}</span> of {totalCount}
+            </span>
+          )}
+
+          {/* Optional custom right controls */}
+          {rightControls}
+
+          {/* Sync Crawlers Trigger */}
+          {onSync && (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={isSyncing}
+              title="Crawl source job boards for fresh postings"
+              aria-label="Crawl source job boards"
+              className="inline-flex items-center justify-center gap-1.5 h-8.5 md:h-9 px-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin text-[var(--border-focus)]" : ""}`} />
+              <span className="hidden md:inline">{isSyncing ? "Syncing..." : "Sync"}</span>
+            </button>
+          )}
+
+          {/* AI Assistant Button (Only visible when AI dock is collapsed) */}
+          {showAIButton && (
+            <div className="shrink-0 hidden sm:block">
+              <AITopBarButton />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ROW 2: TOUCH-SCROLLABLE PRESET TOGGLES & ADVANCED CRITERIA / SORT        */}
+      {/* ========================================================================= */}
+      <div className="flex items-center justify-between gap-2 w-full pt-0.5">
+        {/* Left Side: Smooth Touch-Scrollable Segment Toggle Chips */}
+        <div className="relative flex-1 min-w-0 overflow-hidden">
+          <div
+            role="tablist"
+            aria-label="Filter presets"
+            className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none scroll-smooth touch-pan-x"
+            style={{
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            {segments.map((seg) => {
+              const isSelected = activeSegment === seg.id;
+              return (
+                <button
+                  key={seg.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => onSegmentChange(seg.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all cursor-pointer shrink-0 border select-none ${
+                    isSelected
+                      ? "bg-[var(--border-focus)] text-white border-[var(--border-focus)] shadow-2xs font-semibold"
+                      : "bg-[var(--surface-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]"
+                  }`}
+                >
+                  <span>{seg.label}</span>
+                  {seg.count !== undefined && (
+                    <span
+                      className={`ml-1.5 px-1 py-0.2 rounded-full text-[10px] font-mono-tabular ${
+                        isSelected ? "bg-white/20 text-white" : "bg-[var(--surface-sunken)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      {seg.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Filters & Sort Controls */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Right Side: Filters Popover Trigger & Sort Dropdown */}
+        <div className="flex items-center gap-1.5 shrink-0 pl-1 border-l border-[var(--border-subtle)]">
+          {/* Advanced Filter Popover Trigger */}
           {onToggleFilters && (
             <button
               type="button"
               onClick={onToggleFilters}
-              className={`inline-flex items-center gap-1 px-2 py-1 md:py-1.5 rounded-md border text-xs font-medium transition-colors cursor-pointer ${
+              aria-label="Open advanced filters popover"
+              className={`inline-flex items-center gap-1 h-7.5 px-2 rounded-md border text-xs font-semibold transition-colors cursor-pointer ${
                 filterCount > 0
                   ? "border-[var(--border-focus)] bg-[var(--surface-sunken)] text-[var(--border-focus)]"
-                  : "border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  : "border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]"
               }`}
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Filters</span>
+              <SlidersHorizontal className="h-3 w-3" />
+              <span className="hidden sm:inline">Filters</span>
               {filterCount > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-[var(--border-focus)] text-white text-[10px] font-mono-tabular font-bold">
                   {filterCount}
@@ -126,26 +213,22 @@ export function StickyFilterBar({
             </button>
           )}
 
-          {/* Sort Select */}
-          <div className="relative">
-            <select
-              value={sortValue}
-              onChange={(e) => onSortChange(e.target.value)}
-              className="pl-2 pr-6 py-1 md:py-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[11px] md:text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] transition-colors cursor-pointer appearance-none"
-            >
-              {sortOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <ArrowUpDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--text-muted)]" />
-          </div>
-
-          {/* AI Assistant Button in Top Bar (with semantic status indicator circle) */}
-          {showAIButton && (
-            <div className="pl-1 border-l border-[var(--border-subtle)] hidden sm:block">
-              <AITopBarButton />
+          {/* Sort Select (Only rendered if sortOptions is provided) */}
+          {sortOptions && sortOptions.length > 0 && onSortChange && (
+            <div className="relative shrink-0">
+              <select
+                value={sortValue}
+                onChange={(e) => onSortChange(e.target.value)}
+                aria-label="Sort list"
+                className="pl-2 pr-6 h-7.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)] focus:outline-none focus:border-[var(--border-focus)] transition-colors cursor-pointer appearance-none"
+              >
+                {sortOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ArrowUpDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--text-muted)]" />
             </div>
           )}
         </div>
