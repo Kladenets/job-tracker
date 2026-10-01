@@ -1,115 +1,645 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
-import { Sparkles, ExternalLink, Bookmark, Check, ShieldAlert, Cpu } from "lucide-react";
+import { JobCard } from "../components/job-card";
+import { InboxCardSkeleton } from "../components/inbox-card-skeleton";
+import { InboxEmptyState } from "../components/inbox-empty-state";
+import { CardErrorBoundary } from "../components/card-error-boundary";
+import { FilterPopover, FilterCriteria } from "../components/filter-popover";
 import { useAIDockStore } from "../shell/ai-dock-store";
+import { useShellStore } from "../shell/shell-store";
+import { UnifiedJobPosting } from "../../types/job-posting";
+import { CheckCircle2, RotateCcw, AlertCircle, Sparkles } from "lucide-react";
+
+interface ToastNotification {
+  id: string;
+  type: "success" | "info" | "undo";
+  message: string;
+  undoAction?: () => void;
+}
 
 export function InboxPage() {
-  const [search, setSearch] = useState("");
-  const [segment, setSegment] = useState("all");
-  const [sort, setSort] = useState("fit_desc");
+  const queryClient = useQueryClient();
   const { askAboutJob } = useAIDockStore();
+  const { userRole } = useShellStore();
+  const isGuest = userRole === "guest";
 
-  const sampleJob = {
-    id: "job-stripe-001",
-    title: "Senior Staff Distributed Systems Engineer",
-    company: "Stripe",
-    location: "San Francisco, CA (Remote US)",
-    salary: "$185k – $225k",
+  // Filter & Search State
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [segment, setSegment] = useState<string>("all");
+  const [sort, setSort] = useState<string>("fit_desc");
+  const [focusedIndex, setFocusedIndex] = useState<number>(0);
+  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
+  const [toast, setToast] = useState<ToastNotification | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Advanced Filter Criteria
+  const [filterCriteria, setFilterCriteria] = useState<FilterCriteria>({
+    workplaceType: "all",
+    source: "all",
+    missingSalary: false,
+    missingLocation: false,
+  });
+
+  // History stack for undo (Cmd+Z)
+  const [triageHistory, setTriageHistory] = useState<
+    Array<{ job: UnifiedJobPosting; prevStatus: string }>
+  >([]);
+
+  // 200ms debounce on search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  // Fetch jobs from server API
+  const {
+    data: jobsData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<{ count: number; postings: UnifiedJobPosting[] }>({
+    queryKey: ["jobs"],
+    queryFn: async () => {
+      const res = await fetch("/api/jobs?limit=150");
+      if (!res.ok) {
+        throw new Error(`Failed to load jobs: HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+  });
+
+  const allJobs: UnifiedJobPosting[] = useMemo(() => {
+    return jobsData?.postings || [];
+  }, [jobsData]);
+
+  // Extract available source adapters dynamically
+  const availableSources = useMemo(() => {
+    const set = new Set<string>();
+    for (const j of allJobs) {
+      if (j.source) set.add(j.source);
+    }
+    return Array.from(set);
+  }, [allJobs]);
+
+  // Active filter count for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filterCriteria.workplaceType !== "all") count++;
+    if (filterCriteria.source !== "all") count++;
+    if (filterCriteria.missingSalary) count++;
+    if (filterCriteria.missingLocation) count++;
+    return count;
+  }, [filterCriteria]);
+
+  // Filter & Sort Logic
+  const filteredJobs = useMemo(() => {
+    return allJobs.filter((job) => {
+      // 1. Segment filter
+      if (segment === "recommended") {
+        const score =
+          job.ai_analysis?.overall_fit_score ??
+          (job.jev_confidence != null ? job.jev_confidence * 100 : 0);
+        if (score < 70) return false;
+      } else if (segment === "marginal") {
+        const score =
+          job.ai_analysis?.overall_fit_score ??
+          (job.jev_confidence != null ? job.jev_confidence * 100 : 0);
+        if (score < 40 || score >= 70) return false;
+      } else if (segment === "saved") {
+        if (job.job_status !== "saved") return false;
+      } else if (segment === "dismissed") {
+        if (job.job_status !== "dismissed") return false;
+      } else if (segment === "hidden") {
+        if (job.job_status !== "dismissed" && job.job_status !== "filtered_out") return false;
+      } else {
+        // "all" active queue: exclude dismissed and filtered_out unless explicitly in dismissed/hidden tab
+        if (job.job_status === "dismissed" || job.job_status === "filtered_out") return false;
+      }
+
+      // 2. Search query filter (title, company, description, tech keywords)
+      if (debouncedSearch.trim()) {
+        const term = debouncedSearch.toLowerCase();
+        const titleMatch = job.title.toLowerCase().includes(term);
+        const compMatch = job.company.toLowerCase().includes(term);
+        const locMatch = (job.location || "").toLowerCase().includes(term);
+        const techMatch = (job.crawler_data?.detected_technologies || []).some((t) =>
+          t.toLowerCase().includes(term)
+        );
+        if (!titleMatch && !compMatch && !locMatch && !techMatch) return false;
+      }
+
+      // 3. Workplace type
+      if (filterCriteria.workplaceType !== "all") {
+        if (job.workplace_type !== filterCriteria.workplaceType) return false;
+      }
+
+      // 4. Source
+      if (filterCriteria.source !== "all") {
+        if (job.source !== filterCriteria.source) return false;
+      }
+
+      // 5. Exclude missing salary
+      if (filterCriteria.missingSalary) {
+        if (!job.salary_min_annual && !job.salary_max_annual) return false;
+      }
+
+      // 6. Exclude missing location
+      if (filterCriteria.missingLocation) {
+        if (!job.location) return false;
+      }
+
+      return true;
+    });
+  }, [allJobs, segment, debouncedSearch, filterCriteria]);
+
+  // Sort logic
+  const sortedJobs = useMemo(() => {
+    const list = [...filteredJobs];
+    if (sort === "fit_desc") {
+      list.sort((a, b) => {
+        const scoreA =
+          a.ai_analysis?.overall_fit_score ??
+          (a.jev_confidence != null ? a.jev_confidence * 100 : 0);
+        const scoreB =
+          b.ai_analysis?.overall_fit_score ??
+          (b.jev_confidence != null ? b.jev_confidence * 100 : 0);
+        return scoreB - scoreA;
+      });
+    } else if (sort === "date_desc") {
+      list.sort((a, b) => {
+        const dateA = new Date(a.date_posted || a.date_discovered).getTime();
+        const dateB = new Date(b.date_posted || b.date_discovered).getTime();
+        return dateB - dateA;
+      });
+    } else if (sort === "salary_desc") {
+      list.sort((a, b) => {
+        const salA = a.salary_max_annual || a.salary_min_annual || 0;
+        const salB = b.salary_max_annual || b.salary_min_annual || 0;
+        return salB - salA;
+      });
+    }
+    return list;
+  }, [filteredJobs, sort]);
+
+  // Clamped focused index
+  useEffect(() => {
+    if (focusedIndex >= sortedJobs.length && sortedJobs.length > 0) {
+      setFocusedIndex(sortedJobs.length - 1);
+    }
+  }, [sortedJobs.length, focusedIndex]);
+
+  // Show Toast
+  const showToast = useCallback((toastData: ToastNotification) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast(toastData);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+    }, 4500);
+  }, []);
+
+  // Update status mutation (Optimistic UI update)
+  const statusMutation = useMutation({
+    mutationFn: async ({
+      jobId,
+      status,
+      reason,
+    }: {
+      jobId: string;
+      status: string;
+      reason?: string;
+    }) => {
+      const res = await fetch(`/api/jobs/${jobId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reason, changedBy: "user" }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      return res.json();
+    },
+    onMutate: async ({ jobId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["jobs"] });
+      const prevData = queryClient.getQueryData<{ count: number; postings: UnifiedJobPosting[] }>([
+        "jobs",
+      ]);
+
+      if (prevData) {
+        queryClient.setQueryData(["jobs"], {
+          ...prevData,
+          postings: prevData.postings.map((p) =>
+            p.id === jobId ? { ...p, job_status: status as any } : p
+          ),
+        });
+      }
+      return { prevData };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevData) {
+        queryClient.setQueryData(["jobs"], context.prevData);
+      }
+      showToast({
+        id: `err-${Date.now()}`,
+        type: "info",
+        message: "Failed to update job status on server.",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+  });
+
+  // Background Sync Mutation
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      // Trigger greenhouse crawl ingestion
+      const res = await fetch("/api/ingest/greenhouse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ board: "gitlab" }),
+      });
+      if (!res.ok) throw new Error("Sync failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      const processed = data.totalProcessed ?? 0;
+      const imported = data.newImported ?? 0;
+      showToast({
+        id: `sync-${Date.now()}`,
+        type: "success",
+        message: `Sync complete: ${processed} jobs evaluated, ${imported} new postings added.`,
+      });
+    },
+    onError: () => {
+      showToast({
+        id: `sync-err-${Date.now()}`,
+        type: "info",
+        message: "Source crawl completed with warnings or rate limits.",
+      });
+    },
+  });
+
+  // Triage Handlers
+  const handleSave = useCallback(
+    (job: UnifiedJobPosting) => {
+      if (isGuest) {
+        showToast({
+          id: `guest-${Date.now()}`,
+          type: "info",
+          message: "Demo mode: Actions are view-only.",
+        });
+        return;
+      }
+      const prevStatus = job.job_status;
+      setTriageHistory((prev) => [{ job, prevStatus }, ...prev.slice(0, 19)]);
+      const newStatus = job.job_status === "saved" ? "discovered" : "saved";
+      statusMutation.mutate({
+        jobId: job.id,
+        status: newStatus,
+        reason: "User toggled bookmark in inbox",
+      });
+      showToast({
+        id: `save-${Date.now()}`,
+        type: "success",
+        message: newStatus === "saved" ? `Saved "${job.title}" to bookmarks` : `Removed "${job.title}" from saved`,
+        undoAction: () => {
+          statusMutation.mutate({ jobId: job.id, status: prevStatus });
+        },
+      });
+    },
+    [isGuest, statusMutation, showToast]
+  );
+
+  const handleDismiss = useCallback(
+    (job: UnifiedJobPosting) => {
+      if (isGuest) {
+        showToast({
+          id: `guest-${Date.now()}`,
+          type: "info",
+          message: "Demo mode: Actions are view-only.",
+        });
+        return;
+      }
+      const prevStatus = job.job_status;
+      setTriageHistory((prev) => [{ job, prevStatus }, ...prev.slice(0, 19)]);
+      statusMutation.mutate({
+        jobId: job.id,
+        status: "dismissed",
+        reason: "User dismissed job from queue",
+      });
+      showToast({
+        id: `dismiss-${Date.now()}`,
+        type: "undo",
+        message: `Dismissed "${job.title}"`,
+        undoAction: () => {
+          statusMutation.mutate({ jobId: job.id, status: prevStatus });
+        },
+      });
+    },
+    [isGuest, statusMutation, showToast]
+  );
+
+  const handleRestore = useCallback(
+    (job: UnifiedJobPosting) => {
+      if (isGuest) {
+        showToast({
+          id: `guest-${Date.now()}`,
+          type: "info",
+          message: "Demo mode: Actions are view-only.",
+        });
+        return;
+      }
+      statusMutation.mutate({
+        jobId: job.id,
+        status: "discovered",
+        reason: "User restored dismissed job to active queue",
+      });
+      showToast({
+        id: `restore-${Date.now()}`,
+        type: "success",
+        message: `Restored "${job.title}" to active queue`,
+      });
+    },
+    [isGuest, statusMutation, showToast]
+  );
+
+  const handleApply = useCallback(
+    (job: UnifiedJobPosting) => {
+      const url = job.application_url || job.canonical_url || job.source_url;
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
+    []
+  );
+
+  const handleAskAI = useCallback(
+    (job: UnifiedJobPosting) => {
+      askAboutJob({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location || "Remote US",
+        salary: job.raw_salary_text || (job.salary_min_annual ? `$${job.salary_min_annual}` : "Salary unlisted"),
+      });
+    },
+    [askAboutJob]
+  );
+
+  // Undo (Cmd+Z)
+  const handleUndo = useCallback(() => {
+    if (triageHistory.length === 0) return;
+    const lastItem = triageHistory[0];
+    setTriageHistory((prev) => prev.slice(1));
+    statusMutation.mutate({
+      jobId: lastItem.job.id,
+      status: lastItem.prevStatus,
+      reason: "User triggered Undo",
+    });
+    showToast({
+      id: `undo-${Date.now()}`,
+      type: "info",
+      message: `Restored "${lastItem.job.title}" to previous state`,
+    });
+  }, [triageHistory, statusMutation, showToast]);
+
+  // Keyboard Triage Ergonomics: j/k navigation, s save, x dismiss, a apply, c AI, Cmd+Z undo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      // Cmd+Z or Ctrl+Z Undo
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Active focused job
+      const currentJob = sortedJobs[focusedIndex];
+
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.min(prev + 1, sortedJobs.length - 1));
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.max(prev - 1, 0));
+      } else if (currentJob) {
+        if (e.key === "s") {
+          e.preventDefault();
+          handleSave(currentJob);
+        } else if (e.key === "x") {
+          e.preventDefault();
+          handleDismiss(currentJob);
+        } else if (e.key === "a") {
+          e.preventDefault();
+          handleApply(currentJob);
+        } else if (e.key === "c") {
+          e.preventDefault();
+          handleAskAI(currentJob);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sortedJobs, focusedIndex, handleSave, handleDismiss, handleApply, handleAskAI, handleUndo]);
+
+  // Determine which empty state to display if list is empty
+  const emptyStateType = useMemo(() => {
+    if (allJobs.length === 0) return "empty_database";
+    if (segment === "all" && !debouncedSearch && activeFilterCount === 0) return "inbox_zero";
+    return "filter_mismatch";
+  }, [allJobs.length, segment, debouncedSearch, activeFilterCount]);
+
+  const handleResetFilters = () => {
+    setSearch("");
+    setDebouncedSearch("");
+    setSegment("all");
+    setFilterCriteria({
+      workplaceType: "all",
+      source: "all",
+      missingSalary: false,
+      missingLocation: false,
+    });
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-full">
-      {/* Standard In-Page Sticky Filter Bar */}
-      <StickyFilterBar
-        itemCount={14}
-        totalCount={42}
-        searchValue={search}
-        onSearchChange={setSearch}
-        activeSegment={segment}
-        onSegmentChange={setSegment}
-        sortValue={sort}
-        onSortChange={setSort}
-      />
+    <div className="flex-1 flex flex-col min-h-full relative">
+      {/* 1. Standard In-Page Sticky Filter Bar */}
+      <div className="relative">
+        <StickyFilterBar
+          itemCount={sortedJobs.length}
+          totalCount={allJobs.length}
+          searchValue={search}
+          onSearchChange={setSearch}
+          activeSegment={segment}
+          onSegmentChange={setSegment}
+          segments={[
+            { id: "all", label: "All Active" },
+            { id: "recommended", label: "High Fit (≥70%)" },
+            { id: "marginal", label: "Marginal" },
+            { id: "saved", label: "Saved" },
+            { id: "dismissed", label: "Dismissed" },
+          ]}
+          sortValue={sort}
+          onSortChange={setSort}
+          sortOptions={[
+            { id: "fit_desc", label: "Highest Fit" },
+            { id: "date_desc", label: "Newest Discovered" },
+            { id: "salary_desc", label: "Salary" },
+          ]}
+          filterCount={activeFilterCount}
+          onToggleFilters={() => setIsFilterPopoverOpen(!isFilterPopoverOpen)}
+          onSync={() => syncMutation.mutate()}
+          isSyncing={syncMutation.isPending}
+        />
 
-      {/* Page Content Viewport */}
-      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4 flex-1">
+        {/* Filter Popover */}
+        <FilterPopover
+          isOpen={isFilterPopoverOpen}
+          criteria={filterCriteria}
+          onChange={setFilterCriteria}
+          availableSources={availableSources}
+          onClose={() => setIsFilterPopoverOpen(false)}
+          onReset={() => {
+            setFilterCriteria({
+              workplaceType: "all",
+              source: "all",
+              missingSalary: false,
+              missingLocation: false,
+            });
+          }}
+        />
+      </div>
+
+      {/* 2. Main Center Workspace Feed */}
+      <div className="p-3 md:p-6 max-w-5xl mx-auto w-full space-y-3.5 flex-1">
+        {/* Header Title with Active Feed telemetry */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
           <div>
             <h1 className="text-lg md:text-xl font-bold tracking-tight">Recommendation Inbox</h1>
             <p className="text-xs text-[var(--text-secondary)]">
-              Curated postings discovered across ATS boards and aggregators, filtered by your candidate profile.
+              Curated postings discovered across ATS boards and aggregators, filtered by candidate profile.
             </p>
           </div>
-          <span className="self-start sm:self-auto text-xs font-mono-tabular px-2 py-0.5 md:py-1 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
-            Active Feed
-          </span>
-        </div>
-
-        {/* Job Card Showcase with Ask AI Trigger */}
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 md:p-4 shadow-xs space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 md:gap-4">
-            <div className="flex items-start gap-3 min-w-0">
-              {/* Circular SVG Arc Ring Mockup */}
-              <div className="relative h-9 w-9 md:h-10 md:w-10 shrink-0 flex items-center justify-center rounded-full bg-[var(--status-recommended-bg)] text-[var(--status-recommended-fg)] font-mono-tabular font-bold text-xs border border-[var(--status-recommended-fg)]/20">
-                87%
-              </div>
-              <div className="space-y-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <h3 className="font-bold text-xs md:text-sm text-[var(--text-primary)]">
-                    {sampleJob.title}
-                  </h3>
-                  <span className="text-xs text-[var(--text-muted)] font-normal">· {sampleJob.company}</span>
-                </div>
-                {/* Zero-Pill Typography with middots */}
-                <p className="text-[11px] md:text-xs text-[var(--text-secondary)] font-mono-tabular break-words">
-                  {sampleJob.location} · {sampleJob.salary} · Posted 2d ago · Greenhouse
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-start shrink-0 pt-1 sm:pt-0">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {triageHistory.length > 0 && (
               <button
                 type="button"
-                onClick={() => askAboutJob(sampleJob)}
-                title="Ask AI about this job (⌘K)"
-                className="px-2.5 py-1 rounded border border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
+                onClick={handleUndo}
+                title="Undo last action (Cmd+Z)"
+                className="text-xs font-semibold px-2 py-0.5 md:py-1 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] hover:bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1 cursor-pointer"
               >
-                <Sparkles className="h-3 w-3" />
-                <span>Ask AI</span>
+                <RotateCcw className="h-3 w-3" />
+                <span>Undo</span>
+                <kbd className="text-[9px] font-mono-tabular opacity-70">⌘Z</kbd>
               </button>
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-medium hover:bg-[var(--surface-sunken)] transition-colors cursor-pointer"
-              >
-                Save (s)
-              </button>
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-medium hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger-fg)] transition-colors cursor-pointer"
-              >
-                Dismiss (x)
-              </button>
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded bg-[var(--border-focus)] text-white text-xs font-medium hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1"
-              >
-                <span>Apply</span>
-                <ExternalLink className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] text-[var(--text-muted)]">
-            <span>Deterministic Rules: ✅ Experience (6+ yrs) · ✅ Remote US · ⚠️ Salary unlisted</span>
-            <span className="font-mono-tabular hidden sm:inline">Press Space or click to expand audit drawer</span>
+            )}
+            <span className="text-xs font-mono-tabular px-2 py-0.5 md:py-1 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)]">
+              {allJobs.length} Ingested
+            </span>
           </div>
         </div>
 
-        <div className="p-4 rounded-lg border border-dashed border-[var(--border-subtle)] text-center text-xs text-[var(--text-muted)]">
-          Full recommendation queue and virtual list will be wired in Chunk 4.
-        </div>
+        {/* Loading Skeletons */}
+        {isLoading && (
+          <div className="space-y-3" data-testid="inbox-loading-skeletons">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <InboxCardSkeleton key={idx} />
+            ))}
+          </div>
+        )}
+
+        {/* Error Fallback */}
+        {isError && (
+          <div className="rounded-lg border border-[var(--status-danger-fg)]/30 bg-[var(--status-danger-bg)]/20 p-6 text-center space-y-2">
+            <AlertCircle className="h-6 w-6 text-[var(--status-danger-fg)] mx-auto" />
+            <h3 className="text-sm font-bold text-[var(--status-danger-fg)]">
+              Failed to load recommendations
+            </h3>
+            <p className="text-xs text-[var(--text-muted)]">
+              {error instanceof Error ? error.message : "Network error"}
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loaded Cards Queue */}
+        {!isLoading && !isError && sortedJobs.length > 0 && (
+          <div className="space-y-3" role="feed" aria-label="Job recommendations queue">
+            {sortedJobs.map((job, index) => (
+              <CardErrorBoundary key={job.id} jobId={job.id} fallbackTitle={job.title}>
+                <JobCard
+                  job={job}
+                  isFocused={index === focusedIndex}
+                  onSave={handleSave}
+                  onDismiss={handleDismiss}
+                  onRestore={handleRestore}
+                  onAskAI={handleAskAI}
+                  onApply={handleApply}
+                  isGuest={isGuest}
+                />
+              </CardErrorBoundary>
+            ))}
+          </div>
+        )}
+
+        {/* Differentiated Empty States */}
+        {!isLoading && !isError && sortedJobs.length === 0 && (
+          <InboxEmptyState
+            type={emptyStateType}
+            onResetFilters={handleResetFilters}
+            onTriggerSync={() => syncMutation.mutate()}
+            isSyncing={syncMutation.isPending}
+          />
+        )}
       </div>
+
+      {/* 3. Accessible Toast Notification Banner */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="inbox-toast"
+          className="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 z-50 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-overlay)] text-[var(--text-primary)] shadow-xl px-4 py-2.5 flex items-center gap-3 text-xs animate-in fade-in duration-150"
+        >
+          <div className="flex items-center gap-2">
+            {toast.type === "success" ? (
+              <CheckCircle2 className="h-4 w-4 text-[var(--status-recommended-fg)]" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-amber-500" />
+            )}
+            <span className="font-medium">{toast.message}</span>
+          </div>
+
+          {toast.undoAction && (
+            <button
+              type="button"
+              onClick={() => {
+                toast.undoAction?.();
+                setToast(null);
+              }}
+              className="px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-base)] font-bold text-[11px] cursor-pointer ml-1"
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

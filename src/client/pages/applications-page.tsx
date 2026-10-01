@@ -14,6 +14,7 @@ export function ApplicationsPage() {
         totalCount={5}
         searchValue={search}
         onSearchChange={setSearch}
+        searchPlaceholder="Filter applications by company or title..."
         activeSegment={segment}
         onSegmentChange={setSegment}
         segments={[

@@ -62,13 +62,17 @@ Root Shell (__root.tsx)
   - Sticky positioning: `position: sticky; top: 0; z-index: 10;` with backdrop blur (`backdrop-filter: blur(8px)`).
   - Keeps 100% of the center workspace available for the feed or table below.
 
-### 4.2 Standard Layout Rhythm
+### 4.2 Two-Tier Layout Rhythm & Responsiveness
 ```text
-[ Search Input (/) 🔍 ] [ Showing 14 of 42 ]  |  [ Filter Segments: All | High Fit | Marginal ]  |  [ Filters (2) ⚙️ ] [ Sort ▾ ]
+Row 1: [ Search Input (/) 🔍 ] ────── [ Showing 14 of 42 ] ── [ 🔄 Sync ] ── [ ✨ AI ]
+Row 2: [ ◄ Scrollable Presets: All Active | High Fit ≥70% | Marginal | Saved | Dismissed ► ] ── [ Filters (2) ⚙️ ] [ Sort ▾ ]
 ```
-1. **Left:** Text search input (`/` shortcut) with a 200ms debounce and active item counter (`Showing 14 of 42 jobs`).
-2. **Center:** High-frequency quick-toggle segmented buttons (instant optimistic response).
-3. **Right:** Sort dropdown (`Highest Fit`, `Newest`, `Salary`) and an advanced "Filters (n)" popover button for secondary criteria (salary slider, source adapter, workplace type).
+1. **Row 1 (Full-Width Search & Global Actions):**
+   - Expands to the full width of the main center workspace.
+   - Text search input (`/` shortcut) with 200ms debounce, clear `(X)` button, item counter, crawler `Sync` button, and top-bar AI trigger.
+2. **Row 2 (Scrollable Segmented Presets & Secondary Criteria):**
+   - **Horizontal Touch-Scrollable Chips:** Uses `overflow-x-auto`, `scrollbar-none`, and `touch-pan-x`. On mobile viewports (<768px) or when both side panels (navigation rail + AI dock) are open, preset chips can be swiped smoothly with zero text wrapping or button clipping.
+   - **Secondary Controls:** Advanced "Filters (n)" popover button and Sort dropdown remain accessible on the right edge.
 
 ### 4.3 Type-Safe TanStack Router Search Params
 All active filter state is bidirectionally serialized into URL search parameters validated with Zod. Deep links can be shared, bookmarked, or refreshed without losing filter state.
