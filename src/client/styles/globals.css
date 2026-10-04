@@ -97,6 +97,11 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-variant-numeric: tabular-nums;
   }
+
+  /* Spring physics motion timing (requirements/frontend/page-applications.md: stiffness 220, damping 24) */
+  .spring-transition {
+    transition: transform 320ms cubic-bezier(0.34, 1.45, 0.64, 1), box-shadow 250ms ease, opacity 200ms ease;
+  }
 }
 
 /* Reduced Motion Override (WCAG requirement) */

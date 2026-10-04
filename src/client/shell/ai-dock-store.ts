@@ -17,8 +17,8 @@ export interface JobContextSummary {
   id: string;
   title: string;
   company: string;
-  location?: string;
-  salary?: string;
+  location?: string | null;
+  salary?: string | null;
 }
 
 export interface ConversationSummary {

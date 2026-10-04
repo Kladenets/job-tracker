@@ -225,10 +225,19 @@ app.put("/api/candidate-profile", (req: Request, res: Response) => {
 });
 
 // ====================================================================
-// Applications Management Endpoints (requirements/api.md section 2.1)
+// Applications Management Endpoints (requirements/api.md section 2.1 & page-applications.md section 1.6)
 // ====================================================================
 app.get("/api/applications", async (req: Request, res: Response) => {
   try {
+    // Section 1.6 Guest Mode Boundary: strictly restricted to authenticated owner sessions
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Application pipeline is restricted to authenticated candidate workspace to preserve privacy.",
+      });
+    }
+
     const { repository } = getRepository();
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const applications = await repository.listApplications({ status });
@@ -241,6 +250,14 @@ app.get("/api/applications", async (req: Request, res: Response) => {
 
 app.get("/api/applications/:id", async (req: Request, res: Response) => {
   try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Application pipeline is restricted to authenticated candidate workspace.",
+      });
+    }
+
     const { repository } = getRepository();
     const application = await repository.getApplication(req.params.id);
     if (!application) {
@@ -341,10 +358,19 @@ app.delete("/api/applications/:id", async (req: Request, res: Response) => {
 });
 
 // ====================================================================
-// Metrics & Funnel Dashboard (requirements/api.md section 2.2)
+// Metrics & Funnel Dashboard (requirements/api.md section 2.2 & page-dashboard.md section 1.6)
 // ====================================================================
 app.get("/api/dashboard/metrics", async (req: Request, res: Response) => {
   try {
+    // Section 1.6 Guest Mode Boundary: strictly restricted to authenticated owner sessions
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Metrics and conversion funnel are restricted to authenticated candidate workspace to preserve privacy.",
+      });
+    }
+
     const { repository } = getRepository();
     const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
     const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;

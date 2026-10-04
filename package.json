@@ -11,7 +11,7 @@
     "lint:client": "tsc --project tsconfig.client.json --noEmit",
     "lint": "npm run lint:server && npm run lint:client",
     "agent:chat": "tsx src/scripts/chat.ts",
-    "test": "node -r tsx/cjs src/normalizers/__tests__/job-translator.test.ts && node -r tsx/cjs src/pipeline/__tests__/deduplication-and-state.test.ts && node -r tsx/cjs src/ai/agent/__tests__/agent.test.ts && node -r tsx/cjs src/middleware/__tests__/auth.test.ts && node -r tsx/cjs src/pipeline/__tests__/applications-and-metrics.test.ts && node -r tsx/cjs src/pipeline/__tests__/api-endpoints.test.ts && node -r tsx/cjs src/client/theme/__tests__/theme-and-tokens.test.ts && node -r tsx/cjs src/client/shell/__tests__/shell-and-router.test.ts && node -r tsx/cjs src/client/shell/__tests__/ai-dock.test.ts && node -r tsx/cjs src/client/pages/__tests__/inbox-page.test.ts",
+    "test": "node -r tsx/cjs src/normalizers/__tests__/job-translator.test.ts && node -r tsx/cjs src/pipeline/__tests__/deduplication-and-state.test.ts && node -r tsx/cjs src/ai/agent/__tests__/agent.test.ts && node -r tsx/cjs src/middleware/__tests__/auth.test.ts && node -r tsx/cjs src/pipeline/__tests__/applications-and-metrics.test.ts && node -r tsx/cjs src/pipeline/__tests__/api-endpoints.test.ts && node -r tsx/cjs src/client/theme/__tests__/theme-and-tokens.test.ts && node -r tsx/cjs src/client/shell/__tests__/shell-and-router.test.ts && node -r tsx/cjs src/client/shell/__tests__/ai-dock.test.ts && node -r tsx/cjs src/client/pages/__tests__/inbox-page.test.ts && node -r tsx/cjs src/client/pages/__tests__/applications-page.test.ts && node -r tsx/cjs src/client/pages/__tests__/dashboard-page.test.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {

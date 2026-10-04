@@ -371,16 +371,39 @@ export class FileJobRepository implements JobPostingRepository {
     const offerRate = appliedCount > 0 ? Math.round((offerCount / appliedCount) * 100) : 0;
     const rejectionRate = appliedCount > 0 ? Math.round((rejectedCount / appliedCount) * 100) : 0;
 
-    // Source Breakdown
-    const sources: Record<string, { discovered: number; recommended: number; applied: number }> = {};
+    // Source Breakdown (page-dashboard.md section 1.5)
+    const sources: Record<
+      string,
+      { discovered: number; recommended: number; applied: number; callbackCount: number; callbackRate: number }
+    > = {};
+
     for (const p of filteredPostings) {
       if (!sources[p.source]) {
-        sources[p.source] = { discovered: 0, recommended: 0, applied: 0 };
+        sources[p.source] = { discovered: 0, recommended: 0, applied: 0, callbackCount: 0, callbackRate: 0 };
       }
       sources[p.source].discovered += 1;
       if (p.job_status === "recommended" || p.jev_fit === true) {
         sources[p.source].recommended += 1;
       }
+    }
+
+    // Map applications to source via parent posting
+    for (const app of filteredApps) {
+      const parentPosting = this.postings.get(app.job_posting_id);
+      const srcName = parentPosting?.source || "manual";
+      if (!sources[srcName]) {
+        sources[srcName] = { discovered: 0, recommended: 0, applied: 0, callbackCount: 0, callbackRate: 0 };
+      }
+      sources[srcName].applied += 1;
+      if (["recruiter_screen", "interviewing", "assessment", "offer", "accepted"].includes(app.status)) {
+        sources[srcName].callbackCount += 1;
+      }
+    }
+
+    // Compute callback rates
+    for (const src of Object.keys(sources)) {
+      const s = sources[src];
+      s.callbackRate = s.applied > 0 ? Math.round((s.callbackCount / s.applied) * 100) : 0;
     }
 
     return {
