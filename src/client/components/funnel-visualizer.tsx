@@ -10,6 +10,7 @@ interface FunnelData {
   recruiterScreenCount: number;
   interviewCount: number;
   offerCount: number;
+  rejectedCount?: number;
 }
 
 interface FunnelVisualizerProps {
@@ -78,7 +79,7 @@ export function FunnelVisualizer({ funnel }: FunnelVisualizerProps) {
 
   return (
     <div className="p-4 sm:p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] space-y-4 shadow-xs">
-      <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
         <div>
           <h3 className="text-sm font-bold text-[var(--text-primary)]">
             End-to-End Pipeline Funnel
@@ -86,6 +87,18 @@ export function FunnelVisualizer({ funnel }: FunnelVisualizerProps) {
           <p className="text-xs text-[var(--text-secondary)]">
             Horizontal stage progression from initial crawl to offer.
           </p>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] font-mono-tabular">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-[var(--status-recommended-fg)] font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Offers: {funnel.offerCount}
+          </span>
+          {funnel.rejectedCount !== undefined && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-muted)] font-medium">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+              Rejections: {funnel.rejectedCount}
+            </span>
+          )}
         </div>
       </div>
 

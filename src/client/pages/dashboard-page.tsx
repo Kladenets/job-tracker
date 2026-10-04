@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
 import { MetricCard } from "../components/metric-card";
@@ -52,10 +52,54 @@ export function DashboardPage() {
   const { userRole } = useShellStore();
   const isGuest = userRole === "guest";
 
-  // Date Range Presets: 7d, 30d, 90d, all, custom
-  const [segment, setSegment] = useState<string>("30d");
-  const [customStart, setCustomStart] = useState<string>("");
-  const [customEnd, setCustomEnd] = useState<string>("");
+  // Date Range Presets: 7d, 30d, 90d, all, custom (serialized in URL search params per page-dashboard.md section 1.1)
+  const [segment, setSegment] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const r = sp.get("range");
+      if (r && ["7d", "30d", "90d", "all", "custom"].includes(r)) {
+        return r;
+      }
+    }
+    return "30d";
+  });
+  const [customStart, setCustomStart] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get("startDate") || "";
+    }
+    return "";
+  });
+  const [customEnd, setCustomEnd] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get("endDate") || "";
+    }
+    return "";
+  });
+
+  // Keep URL search parameters synchronized with active date filter
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("range", segment);
+      if (segment === "custom") {
+        if (customStart) sp.set("startDate", customStart);
+        else sp.delete("startDate");
+        if (customEnd) sp.set("endDate", customEnd);
+        else sp.delete("endDate");
+      } else {
+        sp.delete("startDate");
+        sp.delete("endDate");
+      }
+      const newSearch = sp.toString();
+      const currentSearch = window.location.search.replace(/^\?/, "");
+      if (newSearch !== currentSearch) {
+        const newUrl = `${window.location.pathname}?${newSearch}`;
+        window.history.replaceState(null, "", newUrl);
+      }
+    }
+  }, [segment, customStart, customEnd]);
 
   // Calculate start & end ISO dates based on active segment
   const dateParams = useMemo(() => {
@@ -274,7 +318,7 @@ export function DashboardPage() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
                 <MetricCard
                   title="Applications Submitted"
                   value={metrics.applications.appliedCount}
@@ -314,6 +358,17 @@ export function DashboardPage() {
                   formula="Count(offer or accepted) / Count(total applied) * 100"
                   isSmallSample={isSmallSample}
                 />
+                <MetricCard
+                  title="Rejection Rate"
+                  value={metrics.applications.rejectionRate}
+                  isPercentage
+                  rateNumerator={metrics.applications.rejectedCount}
+                  rateDenominator={metrics.applications.appliedCount}
+                  status={metrics.applications.rejectionRate > 50 ? "marginal" : "default"}
+                  subtitle="Applications closed / passed"
+                  formula="Count(applications marked rejected) / Count(total applied) * 100"
+                  isSmallSample={isSmallSample}
+                />
               </div>
             </div>
 
@@ -328,6 +383,7 @@ export function DashboardPage() {
                 recruiterScreenCount: metrics.applications.recruiterScreenCount,
                 interviewCount: metrics.applications.interviewCount,
                 offerCount: metrics.applications.offerCount,
+                rejectedCount: metrics.applications.rejectedCount,
               }}
             />
 

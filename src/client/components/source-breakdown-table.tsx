@@ -18,6 +18,10 @@ const SOURCE_LABELS: Record<string, { label: string; icon: string }> = {
   lever: { label: "Lever ATS", icon: "lever" },
   jobspy_indeed: { label: "Indeed (JobSpy)", icon: "indeed" },
   jobspy_linkedin: { label: "LinkedIn (JobSpy)", icon: "linkedin" },
+  "jobspy/indeed": { label: "Indeed (JobSpy)", icon: "indeed" },
+  "jobspy/linkedin": { label: "LinkedIn (JobSpy)", icon: "linkedin" },
+  indeed: { label: "Indeed Direct", icon: "indeed" },
+  linkedin: { label: "LinkedIn Direct", icon: "linkedin" },
   manual: { label: "Manual Direct Entry", icon: "manual" },
 };
 

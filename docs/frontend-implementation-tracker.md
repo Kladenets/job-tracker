@@ -98,12 +98,14 @@
   - Metrics: **Jobs Discovered** (raw crawl), **Passed Filtering / Recommended** (qualified yield), **Saved & Bookmarked** (shortlist), and **Jobs Dismissed** (unwanted).
   - Hoverable formula tooltips explaining calculation methodologies.
 - [x] Built **Application & Interview Conversion Rates (`src/client/components/metric-card.tsx`)**:
-  - **Applications Submitted**, **Recruiter Screen Rate**, **Interview Rate**, and **Offer Rate**.
+  - Full 5-card conversion metric suite: **Applications Submitted**, **Recruiter Screen Rate**, **Interview Rate**, **Offer Rate**, and **Rejection Rate**.
   - Rate numerator / denominator badges (e.g. `(2 / 5)`).
   - Graceful zero-division handling (`0%` instead of `NaN` or crashes).
+  - Bi-directional URL search parameter serialization (`?range=...&startDate=...&endDate=...`) for shareable, bookmarkable date filter states.
 - [x] Built **Statistical Integrity & Small-Sample Indicators (`N < 10`)**:
   - Global warning badge in the header: *"Early Signal: Small sample size (N < 10 applications)"*.
   - Metric-level volatile signal tags to prevent over-indexing on early interview ratios.
+  - Enriched calculation tooltips detailing exact formulas and current sample fractions.
 - [x] Built **End-to-End Visualizer Funnel (`src/client/components/funnel-visualizer.tsx`)**:
   - Horizontal multi-stage progression visualizer connecting Crawl $\to$ Passed $\to$ Saved $\to$ Applied $\to$ Screen $\to$ Interview $\to$ Offer.
 - [x] Built **Source Channel Effectiveness Table (`src/client/components/source-breakdown-table.tsx`)**:

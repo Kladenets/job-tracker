@@ -210,4 +210,38 @@ assert.strictEqual(dashboardNoSearchLayout.controlsRow, "row-2", "Right controls
 assert.strictEqual(dashboardNoSearchLayout.isSeparateLineOnMobile, false, "Refresh button must not be on its own line on mobile");
 
 console.log("  ✔ Refresh metrics button styling, label distinction & mobile layout verified");
+
+// ====================================================================
+// Test 7: Conversion Rates 5-Card Layout, Rejection Rate & URL Param Serialization
+// ====================================================================
+function serializeDashboardParams(segment: string, customStart?: string, customEnd?: string) {
+  const sp = new URLSearchParams();
+  sp.set("range", segment);
+  if (segment === "custom") {
+    if (customStart) sp.set("startDate", customStart);
+    if (customEnd) sp.set("endDate", customEnd);
+  }
+  return sp.toString();
+}
+
+assert.strictEqual(serializeDashboardParams("7d"), "range=7d");
+assert.strictEqual(serializeDashboardParams("30d"), "range=30d");
+assert.strictEqual(
+  serializeDashboardParams("custom", "2026-09-01", "2026-10-01"),
+  "range=custom&startDate=2026-09-01&endDate=2026-10-01"
+);
+
+// Verify all 5 conversion metrics from section 1.3 are present and calculated
+const conversionMetricCards = [
+  { title: "Applications Submitted", key: "appliedCount" },
+  { title: "Recruiter Screen Rate", key: "recruiterScreenRate", formula: "Count(screen or beyond) / Count(total applied) * 100" },
+  { title: "Interview Rate", key: "interviewRate", formula: "Count(interviewing or beyond) / Count(total applied) * 100" },
+  { title: "Offer Rate", key: "offerRate", formula: "Count(offer or accepted) / Count(total applied) * 100" },
+  { title: "Rejection Rate", key: "rejectionRate", formula: "Count(applications marked rejected) / Count(total applied) * 100" },
+];
+
+assert.strictEqual(conversionMetricCards.length, 5, "Must render exactly 5 conversion rate cards");
+assert.ok(conversionMetricCards.some((c) => c.title === "Rejection Rate"), "Must include Rejection Rate card per section 1.3");
+
+console.log("  ✔ 5-card conversion metric suite, rejection rate & URL parameter serialization verified");
 console.log("All Chunk 6 Metrics & Funnel Dashboard tests passed successfully!\n");

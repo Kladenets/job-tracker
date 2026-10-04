@@ -50,9 +50,17 @@ export function MetricCard({
             >
               <HelpCircle className="h-3.5 w-3.5" />
             </button>
-            <div className="absolute right-0 top-6 z-20 hidden group-hover/tooltip:block w-56 p-2 rounded-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-secondary)] shadow-lg leading-relaxed pointer-events-none">
+            <div className="absolute right-0 top-6 z-20 hidden group-hover/tooltip:block w-60 p-2.5 rounded-md bg-[var(--surface-overlay)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-secondary)] shadow-lg leading-relaxed pointer-events-none">
               <span className="font-semibold text-[var(--text-primary)] block pb-0.5">Exact Formula:</span>
-              {formula}
+              <p className="font-mono text-[9.5px] text-[var(--text-secondary)]">{formula}</p>
+              {rateNumerator !== undefined && rateDenominator !== undefined && (
+                <div className="pt-1.5 mt-1.5 border-t border-[var(--border-subtle)] font-mono-tabular text-[var(--text-muted)] flex items-center justify-between">
+                  <span>Current sample:</span>
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {rateNumerator} / {rateDenominator} applied
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -75,7 +83,10 @@ export function MetricCard({
           <span className="text-[var(--text-secondary)] font-mono-tabular truncate">{subtitle}</span>
         )}
         {isSmallSample && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[var(--status-marginal-bg)] text-[var(--status-marginal-fg)] border border-[var(--status-marginal-fg)]/20 font-semibold font-mono-tabular whitespace-nowrap">
+          <span
+            title="Early Signal: Small sample size (N < 10 applications submitted)"
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[var(--status-marginal-bg)] text-[var(--status-marginal-fg)] border border-[var(--status-marginal-fg)]/20 font-semibold font-mono-tabular whitespace-nowrap cursor-help"
+          >
             N &lt; 10
           </span>
         )}
