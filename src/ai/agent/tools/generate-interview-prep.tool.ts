@@ -1,10 +1,11 @@
 import { Tool, ToolContext } from "../tool";
 import { UnifiedJobPosting } from "../../../types/job-posting";
+import { getCandidateProfile, getCandidateResume } from "../../../utils/resume-sync";
 
 export class GenerateInterviewPrepTool implements Tool {
   readonly name = "generate_interview_prep";
   readonly description =
-    "Generate tailored technical and behavioral interview preparation questions and key topics for a specific job.";
+    "Generate tailored technical and behavioral interview preparation questions and key topics for a specific job, grounded in the candidate's actual resume history.";
 
   readonly parameters = {
     type: "object" as const,
@@ -45,6 +46,9 @@ export class GenerateInterviewPrepTool implements Tool {
 
     conversation.tagJobId(targetJob.id);
 
+    const resume = getCandidateResume();
+    const candidate = getCandidateProfile();
+
     const techStack = targetJob.crawler_data?.detected_technologies || ["TypeScript", "Full Stack"];
 
     const questions: Record<string, string[]> = {
@@ -62,12 +66,26 @@ export class GenerateInterviewPrepTool implements Tool {
       ],
     };
 
+    const candidateTalkingPoints: string[] = [];
+    if (resume.work && resume.work.length > 0) {
+      const latest = resume.work[0];
+      candidateTalkingPoints.push(`Highlight your role at ${latest.company} as ${latest.position} and the high-throughput systems you delivered.`);
+    }
+    if (resume.projects && resume.projects.length > 0) {
+      const proj = resume.projects[0];
+      candidateTalkingPoints.push(`Draw upon your implementation of '${proj.name}' (${(proj.keywords || []).slice(0, 3).join(", ")}) as tangible architectural evidence.`);
+    }
+    if (candidate.additionalExperience) {
+      candidateTalkingPoints.push(`Reference your hands-on background: ${candidate.additionalExperience.slice(0, 120)}...`);
+    }
+
     return JSON.stringify({
       job_id: targetJob.id,
       company: targetJob.company,
       title: targetJob.title,
       focus_area: args.focus_area || "all",
       techStackFound: techStack,
+      candidateTalkingPoints,
       questions,
       preparationTips: [
         `Review fundamental design tradeoffs around consistency vs availability for ${targetJob.company}'s product domain.`,

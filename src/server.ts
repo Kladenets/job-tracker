@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { runJobSpyScraper } from "./bridges/jobspy-bridge";
-import { JobSpyQuerySchema, RawJobPostingSchema } from "./types/job";
+import { JobSpyQuerySchema, RawJobPostingSchema, RawJobPosting } from "./types/job";
 import { sourceRegistry } from "./adapters";
 import { GreenhouseAdapter } from "./adapters/greenhouse-adapter";
 import { LeverAdapter } from "./adapters/lever-adapter";
@@ -18,6 +18,12 @@ import { GeminiAgent } from "./ai/agent/gemini-agent";
 import { Conversation } from "./ai/agent/conversation";
 import { authMiddleware } from "./middleware/auth";
 import { resolveGeminiApiKey } from "./ai/key-resolver";
+import {
+  getCandidateProfile,
+  getCandidateResume,
+  normalizeStructuredResume,
+  persistResumeAndProfile,
+} from "./utils/resume-sync";
 
 dotenv.config();
 
@@ -184,42 +190,484 @@ app.patch("/api/jobs/:id/status", async (req: Request, res: Response) => {
 });
 
 // ====================================================================
-// Candidate Profile Endpoints (requirements/api.md section 2.3)
+// Candidate Profile Endpoints (requirements/api.md section 2.3 & page-setup.md section 1.6)
 // ====================================================================
 const candidateProfilePath = path.join(process.cwd(), "config", "candidate_profile.json");
+const searchProfilePath = path.join(process.cwd(), "config", "search_profile.json");
 
-app.get("/api/candidate-profile", (_req: Request, res: Response) => {
+app.get("/api/candidate-profile", async (req: Request, res: Response) => {
   try {
-    if (fs.existsSync(candidateProfilePath)) {
-      const data = fs.readFileSync(candidateProfilePath, "utf8");
-      return res.json({ success: true, profile: JSON.parse(data) });
+    // Section 1.6 Guest Mode Boundary: strictly restricted to authenticated owner sessions
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Candidate profile is restricted to authenticated owner sessions to preserve privacy.",
+      });
     }
-    return res.json({
-      success: true,
-      profile: {
-        fullName: "Candidate",
-        email: process.env.ALLOWED_USER_EMAIL || "candidate@example.com",
-        skills: [],
-        yearsExperience: 5,
-        bio: "",
-      },
-    });
+
+    const { repository } = getRepository();
+    const dbProfile = await repository.getUserProfile("candidate_profile");
+    const dbResume = await repository.getUserProfile("candidate_resume");
+    const profile = dbProfile || getCandidateProfile();
+    const resumeData = dbResume || getCandidateResume();
+    return res.json({ success: true, profile, resumeData });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to read candidate profile";
     return res.status(500).json({ success: false, error: message });
   }
 });
 
-app.put("/api/candidate-profile", (req: Request, res: Response) => {
+app.put("/api/candidate-profile", async (req: Request, res: Response) => {
   try {
+    // Section 1.6 Guest Mode Boundary: strictly restricted to authenticated owner sessions
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Candidate profile modifications are restricted to authenticated owner sessions.",
+      });
+    }
+
     const profile = req.body;
     if (!profile || typeof profile !== "object") {
       return res.status(400).json({ success: false, error: "Invalid profile data" });
     }
+
+    const { repository } = getRepository();
+    await repository.saveUserProfile("candidate_profile", profile);
     fs.writeFileSync(candidateProfilePath, JSON.stringify(profile, null, 2), "utf8");
-    return res.json({ success: true, profile });
+
+    const dbResume = await repository.getUserProfile("candidate_resume");
+    const resumeData = dbResume || getCandidateResume();
+    return res.json({ success: true, profile, resumeData });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to write candidate profile";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Manual Remote Resume Sync Endpoint (requirements/frontend/page-setup.md section 1.1)
+app.post("/api/candidate-profile/sync-resume", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Resume synchronization is restricted to authenticated owner sessions.",
+      });
+    }
+
+    const currentProfile = getCandidateProfile();
+    let targetUrl = typeof req.body.url === "string" && req.body.url.trim().length > 0
+      ? req.body.url.trim()
+      : currentProfile.resumeSource?.url;
+
+    if (!targetUrl) {
+      return res.status(400).json({
+        success: false,
+        error: "No resume source URL configured or provided.",
+      });
+    }
+
+    // Auto-normalize GitHub Gist URLs if necessary
+    // e.g. https://gist.github.com/Kladenets/58e9ff9ad9dc8fc33a48961b4e18b4d9 -> https://gist.githubusercontent.com/Kladenets/58e9ff9ad9dc8fc33a48961b4e18b4d9/raw/resume.json
+    const gistMatch = targetUrl.match(/gist\.github\.com\/([^/]+)\/([a-f0-9]+)(?:\/raw)?(?:\/.*)?/i);
+    if (gistMatch) {
+      targetUrl = `https://gist.githubusercontent.com/${gistMatch[1]}/${gistMatch[2]}/raw/resume.json`;
+    }
+
+    let response = await fetch(targetUrl, {
+      headers: {
+        "User-Agent": "JobTrackerApp/1.0 (ResumeSync)",
+        Accept: "application/json, text/plain, */*",
+      },
+      redirect: "follow",
+    });
+
+    // If 404 on /raw/resume.json for gist, try generic /raw fallback
+    if (!response.ok && response.status === 404 && targetUrl.includes("/raw/resume.json")) {
+      const fallbackUrl = targetUrl.replace("/raw/resume.json", "/raw");
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: {
+          "User-Agent": "JobTrackerApp/1.0 (ResumeSync)",
+          Accept: "application/json, text/plain, */*",
+        },
+        redirect: "follow",
+      });
+      if (fallbackRes.ok) {
+        response = fallbackRes;
+        targetUrl = fallbackUrl;
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch resume from ${targetUrl}: HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    let parsedData: any = null;
+
+    if (contentType.includes("application/json") || targetUrl.endsWith(".json")) {
+      parsedData = await response.json();
+    } else {
+      const text = await response.text();
+      try {
+        parsedData = JSON.parse(text);
+      } catch {
+        // Fallback for non-JSON text
+        parsedData = {
+          basics: {
+            name: currentProfile.fullName,
+            url: targetUrl,
+            summary: text.slice(0, 500),
+          },
+        };
+      }
+    }
+
+    const structured = normalizeStructuredResume(parsedData);
+    const result = persistResumeAndProfile(structured, {
+      type: "remote_url",
+      url: targetUrl,
+    });
+
+    const { repository } = getRepository();
+    await repository.saveUserProfile("candidate_profile", result.profile);
+    await repository.saveUserProfile("candidate_resume", result.resumeData);
+
+    return res.json({
+      success: true,
+      message: "Resume synchronized successfully from remote source.",
+      profile: result.profile,
+      resumeData: result.resumeData,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to sync resume";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Local Resume Upload Endpoint (requirements/frontend/page-setup.md section 1.1)
+app.post("/api/candidate-profile/upload-resume", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Resume upload is restricted to authenticated owner sessions.",
+      });
+    }
+
+    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+    const fileName = typeof req.body.fileName === "string" ? req.body.fileName : "uploaded_resume.json";
+
+    if (!content) {
+      return res.status(400).json({ success: false, error: "Empty resume file content received." });
+    }
+
+    let parsedData: any = null;
+    try {
+      parsedData = JSON.parse(content);
+    } catch {
+      // Non-JSON fallback representation
+      parsedData = {
+        basics: {
+          name: "Candidate",
+          summary: content.slice(0, 500),
+        },
+      };
+    }
+
+    const structured = normalizeStructuredResume(parsedData);
+    const result = persistResumeAndProfile(structured, {
+      type: "file_upload",
+      fileName,
+    });
+
+    const { repository } = getRepository();
+    await repository.saveUserProfile("candidate_profile", result.profile);
+    await repository.saveUserProfile("candidate_resume", result.resumeData);
+
+    return res.json({
+      success: true,
+      message: "Resume file uploaded and candidate qualifications refreshed.",
+      profile: result.profile,
+      resumeData: result.resumeData,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to upload resume";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Search Profile GET & PUT Endpoints (page-setup.md section 1.2)
+app.get("/api/search-profile", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Search rules are restricted to authenticated owner sessions.",
+      });
+    }
+
+    const { repository } = getRepository();
+    const dbSearch = await repository.getUserProfile("search_profile");
+    if (dbSearch) {
+      return res.json({ success: true, profile: dbSearch });
+    }
+
+    if (fs.existsSync(searchProfilePath)) {
+      const data = fs.readFileSync(searchProfilePath, "utf8");
+      return res.json({ success: true, profile: JSON.parse(data) });
+    }
+    const profile = loadSearchProfile();
+    return res.json({ success: true, profile });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to read search profile";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.put("/api/search-profile", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Search rule modifications are restricted to authenticated owner sessions.",
+      });
+    }
+
+    const updated = req.body;
+    if (!updated || typeof updated !== "object") {
+      return res.status(400).json({ success: false, error: "Invalid search profile data" });
+    }
+
+    const { repository } = getRepository();
+    await repository.saveUserProfile("search_profile", updated);
+    fs.writeFileSync(searchProfilePath, JSON.stringify(updated, null, 2), "utf8");
+    return res.json({ success: true, profile: updated });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to write search profile";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Single Job URL Ingestion Endpoint (page-setup.md section 1.3)
+app.post("/api/jobs/ingest-url", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Manual job ingestion is restricted to authenticated owner sessions.",
+      });
+    }
+
+    const rawUrl = typeof req.body.url === "string" ? req.body.url.trim() : "";
+    if (!rawUrl) {
+      return res.status(400).json({ success: false, error: "Missing 'url' parameter" });
+    }
+
+    // 1. Greenhouse URL Detection: boards.greenhouse.io/{board}/jobs/{id}
+    const ghMatch = rawUrl.match(/(?:boards|job-boards)\.greenhouse\.io\/([^/]+)\/jobs\/(\d+)/i);
+    if (ghMatch) {
+      const boardToken = ghMatch[1];
+      const jobId = ghMatch[2];
+      try {
+        const ghRes = await fetch(
+          `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(boardToken)}/jobs/${encodeURIComponent(jobId)}?questions=false`
+        );
+        if (ghRes.ok) {
+          const ghData = (await ghRes.json()) as any;
+          const rawPosting: RawJobPosting = {
+            id: String(ghData.id || jobId),
+            site: "greenhouse",
+            job_url: rawUrl,
+            job_url_direct: rawUrl,
+            title: ghData.title || req.body.title || "Software Engineer",
+            company: ghData.company_name || boardToken.charAt(0).toUpperCase() + boardToken.slice(1),
+            location: ghData.location?.name || null,
+            date_posted: ghData.updated_at ? new Date(ghData.updated_at).toISOString() : new Date().toISOString(),
+            job_type: "Full-time",
+            is_remote:
+              (ghData.location?.name || "").toLowerCase().includes("remote") ||
+              (ghData.title || "").toLowerCase().includes("remote"),
+            description: ghData.content || req.body.description || "",
+            company_url: `https://boards.greenhouse.io/${boardToken}`,
+          };
+          const result = await ingestRawPostings([rawPosting]);
+          return res.json({
+            success: true,
+            source: "greenhouse",
+            message: "Job parsed and ingested from Greenhouse ATS",
+            result,
+          });
+        }
+      } catch (e) {
+        console.warn("[Ingest URL] Greenhouse fetch failed:", e);
+      }
+    }
+
+    // 2. Lever URL Detection: jobs.lever.co/{company}/{id}
+    const leverMatch = rawUrl.match(/jobs\.lever\.co\/([^/]+)\/([a-f0-9-]+)/i);
+    if (leverMatch) {
+      const company = leverMatch[1];
+      const jobId = leverMatch[2];
+      try {
+        const leverRes = await fetch(
+          `https://api.lever.co/v0/postings/${encodeURIComponent(company)}/${encodeURIComponent(jobId)}`
+        );
+        if (leverRes.ok) {
+          const leverData = (await leverRes.json()) as any;
+          const rawPosting: RawJobPosting = {
+            id: String(leverData.id || jobId),
+            site: "lever",
+            job_url: rawUrl,
+            job_url_direct: rawUrl,
+            title: leverData.text || req.body.title || "Software Engineer",
+            company: company.charAt(0).toUpperCase() + company.slice(1),
+            location: leverData.categories?.location || null,
+            date_posted: leverData.createdAt ? new Date(leverData.createdAt).toISOString() : new Date().toISOString(),
+            job_type: leverData.categories?.commitment || "Full-time",
+            is_remote:
+              leverData.workplaceType === "remote" ||
+              (leverData.categories?.location || "").toLowerCase().includes("remote"),
+            description: leverData.descriptionPlain || leverData.description || req.body.description || "",
+            company_url: `https://jobs.lever.co/${company}`,
+          };
+          const result = await ingestRawPostings([rawPosting]);
+          return res.json({
+            success: true,
+            source: "lever",
+            message: "Job parsed and ingested from Lever ATS",
+            result,
+          });
+        }
+      } catch (e) {
+        console.warn("[Ingest URL] Lever fetch failed:", e);
+      }
+    }
+
+    // 3. Fallback generic ingestion (LinkedIn, Indeed, direct careers pages)
+    const domainMatch = rawUrl.match(/https?:\/\/(?:www\.)?([^/]+)/i);
+    const domain = domainMatch ? domainMatch[1] : "manual";
+    const site = domain.includes("linkedin")
+      ? "jobspy_linkedin"
+      : domain.includes("indeed")
+      ? "jobspy_indeed"
+      : "manual";
+
+    const rawPosting: RawJobPosting = {
+      id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      site,
+      job_url: rawUrl,
+      job_url_direct: rawUrl,
+      title: req.body.title || "Software Engineer",
+      company: req.body.company || domain.replace(/\.[^.]+$/, ""),
+      location: req.body.location || "Remote US",
+      date_posted: new Date().toISOString(),
+      job_type: "Full-time",
+      is_remote: true,
+      description: req.body.description || `Directly ingested job from ${rawUrl}`,
+    };
+
+    const result = await ingestRawPostings([rawPosting]);
+    return res.json({
+      success: true,
+      source: site,
+      message: "Job ingested and passed through deterministic filter & JEV scoring",
+      result,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to ingest URL";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Manual Discovery Execution Trigger (page-setup.md section 1.4)
+app.post("/api/discovery/run", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role === "guest") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Discovery execution is restricted to authenticated owner sessions.",
+      });
+    }
+
+    const selectedSources =
+      Array.isArray(req.body.sources) && req.body.sources.length > 0
+        ? req.body.sources
+        : ["greenhouse", "lever"];
+
+    let totalDiscovered = 0;
+    let totalRecommended = 0;
+    let totalFiltered = 0;
+    const details: any[] = [];
+
+    // 1. Greenhouse crawl
+    if (selectedSources.includes("greenhouse")) {
+      try {
+        const gh = sourceRegistry.get("greenhouse") as GreenhouseAdapter;
+        const ghJobs = await gh.fetchJobs({ boardToken: "gitlab", searchTerm: "engineer" });
+        totalDiscovered += ghJobs.length;
+        const resIngest = await ingestRawPostings(ghJobs.slice(0, 15));
+        totalRecommended += resIngest.screenedWithJev;
+        totalFiltered += resIngest.filteredOut;
+        details.push({ source: "greenhouse", discovered: ghJobs.length, ...resIngest });
+      } catch (e) {
+        console.warn("Greenhouse run error:", e);
+      }
+    }
+
+    // 2. Lever crawl
+    if (selectedSources.includes("lever")) {
+      try {
+        const lever = sourceRegistry.get("lever") as LeverAdapter;
+        const leverJobs = await lever.fetchJobs({ company: "palantir", searchTerm: "engineer" });
+        totalDiscovered += leverJobs.length;
+        const resIngest = await ingestRawPostings(leverJobs.slice(0, 15));
+        totalRecommended += resIngest.screenedWithJev;
+        totalFiltered += resIngest.filteredOut;
+        details.push({ source: "lever", discovered: leverJobs.length, ...resIngest });
+      } catch (e) {
+        console.warn("Lever run error:", e);
+      }
+    }
+
+    // 3. JobSpy scrape
+    if (selectedSources.includes("jobspy")) {
+      try {
+        const scrape = await runJobSpyScraper({
+          searchTerm: "Software Engineer",
+          location: "Remote",
+          sites: ["indeed"],
+          resultsWanted: 5,
+        });
+        totalDiscovered += scrape.jobs.length;
+        const resIngest = await ingestRawPostings(scrape.jobs);
+        totalRecommended += resIngest.screenedWithJev;
+        totalFiltered += resIngest.filteredOut;
+        details.push({ source: "jobspy", discovered: scrape.jobs.length, ...resIngest });
+      } catch (e) {
+        console.warn("JobSpy run error:", e);
+      }
+    }
+
+    return res.json({
+      success: true,
+      summary: `Discovery run complete across ${selectedSources.length} sources`,
+      discoveredCount: totalDiscovered,
+      recommendedCount: totalRecommended,
+      filteredOutCount: totalFiltered,
+      sources: selectedSources,
+      details,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Discovery run failed";
     return res.status(500).json({ success: false, error: message });
   }
 });

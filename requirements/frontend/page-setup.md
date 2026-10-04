@@ -2,13 +2,28 @@
 
 ## 1. Functional Requirements
 
-### 1.1 Candidate Profile Editor
-- Form interface to configure the user's primary qualifications:
-  - Full Name, Email, Current/Target Job Title.
-  - Core Technical Skills (tag input, e.g. `TypeScript`, `Node.js`, `PostgreSQL`, `Docker`, `React`).
-  - Years of Experience.
-  - Resume Text / Bio Summary (used as context for the AI agent during qualification scoring and cover letter generation).
-  - Save button writing changes via `PUT /api/candidate-profile`.
+### 1.1 Candidate Profile & Structured Resume Engine
+- Form interface to configure the user's primary qualifications with structured resume integration:
+  - Full Name, Email, Current/Target Job Title, Years of Experience, Location, and Workplace Preference.
+  - Core Technical Skills (tag input with auto-population from resume).
+  - **Resume Source Management**:
+    - Supports two distinct source types: `remote_url` (e.g. GitHub Gist raw URL, `https://kylekent.dev/...`) and `file_upload` (`.json`, `.md`, `.txt`, `.pdf`).
+    - Source is always editable via "Edit Source" / "Change Source" control regardless of current configuration.
+    - Confirmation dialog required when switching source types (`remote_url` $\leftrightarrow$ `file_upload`) to prevent accidental configuration abandonment.
+  - **Contextual "Sync Resume Now" Trigger**:
+    - Strictly visible ONLY when the active resume source is `remote_url`. Completely hidden when source is `file_upload`.
+    - Manual trigger only: no automated fetching on initial page load. Shows `last_synced_at` timestamp.
+  - **Complete JSON Resume Standard Compliance**:
+    - Compliant with the canonical **JSON Resume specification (`jsonresume.org`)**, ingesting and retaining all 13 standard schema sections: `meta`, `basics`, `work`, `volunteer`, `education`, `awards`, `certificates`, `publications`, `skills`, `languages`, `interests`, `references`, and `projects`.
+    - **Projects Ingestion**: Ingests project portfolio items (including `name`, `description`, `highlights`, `keywords`, `startDate`, `endDate`, and live `url`), aggregating project technologies into the primary candidate skills graph.
+  - **Two-Tier Bounded Resume Visualizer (Job Card Pattern)**:
+    - **Tier 1 (Collapsed Scan Row ~72px):** Candidate name, current/target title, calculated years of experience, active source badge (`Remote Gist` vs `File: resume.json`), key skills overview, and expand/collapse trigger.
+    - **Tier 2 (Expanded In-Depth Drawer):** Maximum height bounded (`max-h-96`) with clean internal scrolling. Renders structured work history timeline, project portfolio showcases (with links and tech tags), education, categorized skills, and optional raw JSON inspection.
+    - Derived fields (`skills`, `yearsExperience`, `targetTitle`, `location`) auto-populate from the structured resume.
+    - Simple and predictable UI without complex diff calculations.
+  - **Additional Experience & Context (Unstructured Field)**:
+    - Concise unstructured text field for side projects, upcoming certs, or context not present on the formal resume, directly incorporated by the AI agent for fit scoring, interview prep, and cover letter drafting.
+  - Save button persisting changes via `PUT /api/candidate-profile`.
 
 ### 1.2 Search Profile & Deterministic Rules Editor
 - Visual editor for `config/search-profile.ts`:

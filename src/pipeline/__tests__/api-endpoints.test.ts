@@ -93,7 +93,28 @@ async function runApiTests() {
     });
     assert.strictEqual(updateRes.statusCode, 200, "Profile update returns 200");
     assert.strictEqual(updateRes.body.profile.bio, updatedBio, "Updated bio matches");
-    console.log("✓ PUT /api/candidate-profile persisted updated profile");
+    console.log("✓ PUT /api/candidate-profile persisted updated profile to repository");
+
+    // 2b. Test GET & PUT /api/search-profile repository persistence
+    console.log("[Test 2b] Testing GET /api/search-profile & PUT /api/search-profile...");
+    const searchRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/search-profile",
+    });
+    assert.strictEqual(searchRes.statusCode, 200, "Search profile returns 200");
+    assert.ok(searchRes.body.profile, "Search profile returned");
+
+    const putSearchRes = await makeRequest(testServer, {
+      method: "PUT",
+      path: "/api/search-profile",
+      body: {
+        ...searchRes.body.profile,
+        name: "Updated Full-Stack Remote",
+      },
+    });
+    assert.strictEqual(putSearchRes.statusCode, 200, "Search profile PUT returns 200");
+    assert.strictEqual(putSearchRes.body.profile.name, "Updated Full-Stack Remote");
+    console.log("✓ GET & PUT /api/search-profile persisted to repository");
 
     // 3. Test POST /api/jobs/manual to create a test job
     console.log("[Test 3] Testing POST /api/jobs/manual...");

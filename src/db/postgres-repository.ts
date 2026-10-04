@@ -533,4 +533,23 @@ export class PostgresJobRepository implements JobPostingRepository {
       sources,
     };
   }
+
+  async saveUserProfile(key: string, data: any): Promise<void> {
+    const query = `
+      INSERT INTO user_profiles (key, data, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key) DO UPDATE
+      SET data = EXCLUDED.data, updated_at = NOW();
+    `;
+    await this.pool.query(query, [key, JSON.stringify(data)]);
+  }
+
+  async getUserProfile(key: string): Promise<any | null> {
+    const query = `
+      SELECT data FROM user_profiles WHERE key = $1 LIMIT 1;
+    `;
+    const res = await this.pool.query(query, [key]);
+    if (res.rows.length === 0) return null;
+    return res.rows[0].data;
+  }
 }

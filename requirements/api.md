@@ -23,10 +23,12 @@ Supports Page 4 (Metrics & Funnel Dashboard):
   - Sample size flags: `isSmallSample` boolean (`true` if `appliedCount < 10`).
   - Source effectiveness breakdown: counts grouped by `source`.
 
-### 2.3 Candidate Profile (`/api/candidate-profile`)
+### 2.3 Candidate Profile & Structured Resume (`/api/candidate-profile`)
 Supports Page 5 (Setup & Profiles):
-- `GET /api/candidate-profile`: Retrieve user profile JSON (`fullName`, `email`, `targetTitle`, `skills`, `yearsExperience`, `bio`, `notes`).
+- `GET /api/candidate-profile`: Retrieve user profile JSON (`fullName`, `email`, `targetTitle`, `skills`, `yearsExperience`, `resumeSource`, `resumeData`, `additionalExperience`, `notes`).
 - `PUT /api/candidate-profile`: Validate and persist updated user profile to `config/candidate_profile.json`.
+- `POST /api/candidate-profile/sync-resume`: Fetch remote resume URL (e.g. GitHub Gist or personal website), validate JSON schema or trigger AI extraction, and auto-populate candidate profile fields (`skills`, `yearsExperience`).
+- `POST /api/candidate-profile/upload-resume`: Upload local resume file (`.json`, `.md`, `.txt`, `.pdf`), parse structured JSON or run AI extraction, and update candidate profile data.
 
 ### 2.4 Search Criteria & Configuration (`/api/profile`)
 Supports Page 5 (Setup & Profiles):

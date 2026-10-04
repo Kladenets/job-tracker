@@ -14,6 +14,7 @@ export class FileJobRepository implements JobPostingRepository {
   private postings = new Map<string, UnifiedJobPosting>();
   private conversations = new Map<string, StoredConversation>();
   private applications = new Map<string, any>();
+  private profiles = new Map<string, any>();
   private statusHistory: Array<{
     id: string;
     job_posting_id: string;
@@ -57,6 +58,11 @@ export class FileJobRepository implements JobPostingRepository {
         if (Array.isArray(parsed.statusHistory)) {
           this.statusHistory = parsed.statusHistory;
         }
+        if (parsed.profiles && typeof parsed.profiles === "object") {
+          for (const [k, v] of Object.entries(parsed.profiles)) {
+            this.profiles.set(k, v);
+          }
+        }
       }
     } catch (err) {
       console.warn("[FileJobRepository] Failed to read disk store:", err);
@@ -79,6 +85,7 @@ export class FileJobRepository implements JobPostingRepository {
         conversations: Array.from(this.conversations.values()),
         applications: Array.from(this.applications.values()),
         statusHistory: this.statusHistory,
+        profiles: Object.fromEntries(this.profiles.entries()),
       };
 
       fs.writeFileSync(this.dataFilePath, JSON.stringify(payload, null, 2), "utf8");
@@ -433,5 +440,14 @@ export class FileJobRepository implements JobPostingRepository {
       },
       sources,
     };
+  }
+
+  async saveUserProfile(key: string, data: any): Promise<void> {
+    this.profiles.set(key, data);
+    this.saveToDisk();
+  }
+
+  async getUserProfile(key: string): Promise<any | null> {
+    return this.profiles.get(key) || null;
   }
 }

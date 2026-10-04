@@ -64,4 +64,8 @@ export interface JobPostingRepository {
 
   // Discovery Run & Metrics Querying
   getMetrics(options?: { startDate?: string; endDate?: string }): Promise<any>;
+
+  // User Profile, Search Profile & Resume Persistence
+  saveUserProfile(key: string, data: any): Promise<void>;
+  getUserProfile(key: string): Promise<any | null>;
 }

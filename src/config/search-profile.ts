@@ -77,6 +77,27 @@ export function loadSearchProfile(customPath?: string): SearchProfile {
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, "utf-8");
       const parsed = JSON.parse(content);
+
+      // Merge candidate profile skills and target titles if present
+      const candidateProfilePath = path.join(process.cwd(), "config", "candidate_profile.json");
+      if (fs.existsSync(candidateProfilePath)) {
+        try {
+          const cand = JSON.parse(fs.readFileSync(candidateProfilePath, "utf-8"));
+          if (Array.isArray(cand.skills) && cand.skills.length > 0) {
+            const combinedSkills = Array.from(new Set([...(parsed.candidate?.skills || []), ...cand.skills]));
+            parsed.candidate = {
+              ...parsed.candidate,
+              skills: combinedSkills,
+              targetTitles: cand.targetTitle
+                ? Array.from(new Set([cand.targetTitle, ...(parsed.candidate?.targetTitles || [])]))
+                : (parsed.candidate?.targetTitles || []),
+            };
+          }
+        } catch {
+          // ignore error reading candidate profile
+        }
+      }
+
       const validated = SearchProfileSchema.parse(parsed);
       cachedProfile = validated;
       lastLoadedTime = now;

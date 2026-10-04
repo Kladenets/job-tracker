@@ -10,8 +10,8 @@
 | **4** | **Recommendation Inbox (`/inbox`) & Job Cards** | ✅ **COMPLETE** | Sticky filter bar, 2-tier card, SVG arc ring, zero-pill typography, `@container`, keyboard triage (`j`/`k`/`s`/`x`) |
 | **5** | **Application Tracking Board (`/applications`)** | ✅ **COMPLETE** | Dual Kanban + Table view, spring card physics, interview notes drawer, stage history timeline, add application modal |
 | **6** | **Metrics & Funnel Dashboard (`/dashboard`)** | ✅ **COMPLETE** | Date range presets, custom range picker, monospace metrics, conversion rates, small-sample indicators (`N < 10`), source breakdown |
-| **7** | **Setup, Profiles & Discovery Runs (`/setup`)** | ⏳ **NEXT UP** | Candidate profile editor, search rules, crawler health, manual URL ingestion, sync button feedback |
-| **8** | **Role Security, Polish & E2E Verification** | ⏳ Pending | Owner vs Guest mode boundary enforcement, WCAG AA/AAA audit, responsive check, `npm run build` |
+| **7** | **Setup, Profiles & Discovery Runs (`/setup`)** | ✅ **COMPLETE** | Candidate profile editor, search rules, crawler health, single URL ingestion, discovery execution, system diagnostics |
+| **8** | **Role Security, Polish & E2E Verification** | ⏳ **NEXT UP** | Owner vs Guest mode boundary enforcement, WCAG AA/AAA audit, responsive check, `npm run build` |
 
 ---
 
@@ -115,5 +115,50 @@
   - Protected `GET /api/dashboard/metrics` with `403 Forbidden` for guest sessions.
   - Dedicated privacy barrier card in the UI explaining applicant privacy boundary with direct link to the public inbox.
 - [x] Created unit tests in `src/client/pages/__tests__/dashboard-page.test.ts` verifying date math, conversion formulas, small-sample guards, source yield rates, and guest security (100% passing).
+
+---
+
+## Completed: Chunk 7 Deliverables
+- [x] Built **Candidate Profile & Structured Resume Engine (`src/client/components/candidate-profile-editor.tsx`)**:
+  - Full Name, Email, Target Role Title, Location, Workplace Preference, and Years of Experience controls.
+  - Interactive technical skills tag editor with quick add chips and comma/Enter key bindings.
+  - **Structured Resume Source Management**:
+    - Dual source configuration modes: `remote_url` (e.g. GitHub Gist raw URL, `kylekent.dev`) and `file_upload` (`.json`, `.md`, `.txt`, `.pdf`).
+    - Edit source toggle with confirmation dialog when switching source types to prevent accidental loss of configuration.
+  - **Contextual Manual "Sync Resume Now" Trigger**:
+    - Strictly visible only when source is `remote_url` (completely hidden for local `file_upload` mode).
+    - Manual only trigger with `last_synced_at` indicator; no auto-fetch on initial page load.
+  - **Two-Tier Bounded Resume Visualizer (Job Card Pattern)**:
+    - Tier 1 (Collapsed Scan Row ~72px): Candidate name, role title, years of experience, active source badge, and expand trigger.
+    - Tier 2 (Expanded In-Depth Drawer): Bounded height (`max-h-96`) with clean internal scroll. Visualizes work history timeline, projects portfolio (with live links and tech keywords), categorized skills, education, and raw JSON preview.
+    - Full **JSON Resume Specification Compliance (`jsonresume.org`)**: Ingests and retains all 13 standard schema sections (`meta`, `basics`, `work`, `volunteer`, `education`, `awards`, `certificates`, `publications`, `skills`, `languages`, `interests`, `references`, `projects`).
+    - Auto-populates candidate profile fields (`skills`, `yearsExperience`, `targetTitle`, `location`) from parsed structured data including project technologies without complex diff overhead.
+  - **Additional Experience & Context Field**:
+    - Unstructured free-text field for side projects, upcoming certs, or context not present on the formal resume, used by the AI agent for fit scoring and cover letters.
+  - Unsaved changes indicator and form dirty state tracking writing to `PUT /api/candidate-profile`.
+- [x] Built **Search Profile & Deterministic Rules Editor (`src/client/components/search-profile-editor.tsx`)**:
+  - Target Job Titles & title alias tag editor.
+  - Geographic boundaries with city, state, and commute radius limits.
+  - Workplace type checkboxes (`remote`, `hybrid`, `onsite`, `unknown`).
+  - Compensation floor input with annual currency formatting and missing salary tolerance checkbox.
+  - Hard excluded title keywords tag editor (e.g. `clearance required`, `intern`, `director`, `unpaid`).
+  - Excluded companies & staffing agency filters (e.g. `CyberCoders`, `Revature`).
+  - JEV qualification confidence threshold slider (`50%` - `95%`) persisting to `PUT /api/search-profile`.
+- [x] Built **Source Adapters & Manual Job URL Ingestion (`src/client/components/discovery-runs-panel.tsx`)**:
+  - Real-time telemetry cards for Greenhouse ATS, Lever ATS, and JobSpy Scraper CLI.
+  - **Instant Single Job URL Importer**: parses direct Greenhouse, Lever, LinkedIn, or Indeed links, extracts job metadata, runs deterministic filter rules, scores with JEV, and renders an outcome badge with a direct link to `/inbox`.
+  - Backend integration via `POST /api/jobs/ingest-url`.
+- [x] Built **Manual Discovery Execution Trigger (`src/client/components/discovery-runs-panel.tsx`)**:
+  - Multi-source selector checkboxes (Greenhouse, Lever, JobSpy).
+  - Live execution progress indicator reporting `Discovered`, `Filtered Out`, and `JEV Evaluated` tallies.
+  - Completion banner with summary counts and direct action link to review arrivals in `/inbox`.
+  - Backend execution pipeline route via `POST /api/discovery/run`.
+- [x] Built **System & AI Provider Health Overview (`src/client/components/system-health-panel.tsx`)**:
+  - Diagnostics cards for Database Engine (`PostgreSQL` pool vs `File Store`), AI System 1 (`TypeSafe AI / JEV` mode and threshold), and AI System 2 (`Google Gemini Interactions` active tier, failover status, and model alias).
+  - Diagnostic refresh button invalidating queries in real-time.
+- [x] Enforced **Guest Mode Perimeter Defense (`requirements/frontend/page-setup.md section 1.6`)**:
+  - Protected `GET/PUT /api/candidate-profile`, `GET/PUT /api/search-profile`, `POST /api/jobs/ingest-url`, and `POST /api/discovery/run` with `403 Forbidden` for guest sessions.
+  - Built polite candidate privacy security card in `/setup` redirecting guest users to `/inbox`.
+- [x] Created unit tests in `src/client/pages/__tests__/setup-page.test.ts` verifying candidate schema validation, search rule exclusions, URL adapter pattern parsing, discovery telemetry aggregation, guest perimeter security, and dirty state tracking (100% passing).
 
 
