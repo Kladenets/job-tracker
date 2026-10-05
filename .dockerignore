@@ -8,3 +8,7 @@ coverage
 .DS_Store
 *.pyc
 __pycache__
+data
+config/candidate_profile.json
+config/candidate_resume.json
+config/search_profile.json

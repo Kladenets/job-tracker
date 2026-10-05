@@ -17,6 +17,11 @@ data/
 *.sqlite
 *.sqlite-journal
 
+# Local-only candidate and search profile seeds (contain personal data)
+config/candidate_profile.json
+config/candidate_resume.json
+config/search_profile.json
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

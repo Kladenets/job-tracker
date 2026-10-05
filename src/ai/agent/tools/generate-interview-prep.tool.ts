@@ -46,8 +46,8 @@ export class GenerateInterviewPrepTool implements Tool {
 
     conversation.tagJobId(targetJob.id);
 
-    const resume = getCandidateResume();
-    const candidate = getCandidateProfile();
+    const resume = await getCandidateResume(repository);
+    const candidate = await getCandidateProfile(repository);
 
     const techStack = targetJob.crawler_data?.detected_technologies || ["TypeScript", "Full Stack"];
 

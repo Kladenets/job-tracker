@@ -37,6 +37,6 @@ export const useShellStore = create<ShellUIState>((set, get) => ({
   shortcutHelpOpen: false,
   setShortcutHelpOpen: (open: boolean) => set({ shortcutHelpOpen: open }),
   toggleShortcutHelp: () => set((s) => ({ shortcutHelpOpen: !s.shortcutHelpOpen })),
-  userRole: "owner",
+  userRole: "guest",
   setUserRole: (role: "owner" | "guest") => set({ userRole: role }),
 }));

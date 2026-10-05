@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { StructuredResume, ResumeSource } from "../types/resume";
+import { JobPostingRepository } from "../db/repository-interface";
 
 const candidateProfilePath = path.join(process.cwd(), "config", "candidate_profile.json");
 const candidateResumePath = path.join(process.cwd(), "config", "candidate_resume.json");
@@ -8,7 +9,7 @@ const candidateResumePath = path.join(process.cwd(), "config", "candidate_resume
 /**
  * Load active candidate profile
  */
-export function getCandidateProfile(): any {
+function readCandidateProfileSeed(): any {
   if (fs.existsSync(candidateProfilePath)) {
     try {
       return JSON.parse(fs.readFileSync(candidateProfilePath, "utf8"));
@@ -32,10 +33,19 @@ export function getCandidateProfile(): any {
   };
 }
 
+export async function getCandidateProfile(repository: JobPostingRepository): Promise<any> {
+  const savedProfile = await repository.getUserProfile("candidate_profile");
+  if (savedProfile) return savedProfile;
+
+  const profile = readCandidateProfileSeed();
+  await repository.saveUserProfile("candidate_profile", profile);
+  return profile;
+}
+
 /**
  * Load structured candidate resume compliant with JSON Resume spec
  */
-export function getCandidateResume(): StructuredResume {
+function readCandidateResumeSeed(): StructuredResume {
   if (fs.existsSync(candidateResumePath)) {
     try {
       return JSON.parse(fs.readFileSync(candidateResumePath, "utf8"));
@@ -54,6 +64,15 @@ export function getCandidateResume(): StructuredResume {
     education: [],
     projects: [],
   };
+}
+
+export async function getCandidateResume(repository: JobPostingRepository): Promise<StructuredResume> {
+  const savedResume = await repository.getUserProfile("candidate_resume");
+  if (savedResume) return savedResume as StructuredResume;
+
+  const resume = readCandidateResumeSeed();
+  await repository.saveUserProfile("candidate_resume", resume);
+  return resume;
 }
 
 /**
@@ -289,12 +308,11 @@ export function normalizeStructuredResume(raw: any): StructuredResume {
 /**
  * Save candidate resume and update synchronized profile
  */
-export function persistResumeAndProfile(
+export function deriveProfileFromResume(
   resume: StructuredResume,
-  sourceUpdate: Partial<ResumeSource>
+  sourceUpdate: Partial<ResumeSource>,
+  currentProfile: any
 ): { profile: any; resumeData: StructuredResume } {
-  const currentProfile = getCandidateProfile();
-
   // Compute fields from resume
   const computedSkills = extractSkillsFromResume(resume);
   const computedYears = calculateYearsExperience(resume.work);
@@ -322,9 +340,6 @@ export function persistResumeAndProfile(
     skills: computedSkills.length > 0 ? computedSkills : currentProfile.skills,
     resumeSource: updatedSource,
   };
-
-  fs.writeFileSync(candidateResumePath, JSON.stringify(resume, null, 2), "utf8");
-  fs.writeFileSync(candidateProfilePath, JSON.stringify(updatedProfile, null, 2), "utf8");
 
   return { profile: updatedProfile, resumeData: resume };
 }

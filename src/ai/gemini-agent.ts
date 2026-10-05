@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { UnifiedJobPosting } from "../types/job-posting";
-import { SearchProfile, loadSearchProfile } from "../config/search-profile";
+import { SearchProfile, getSearchProfile } from "../config/search-profile";
+import { getRepository } from "../db";
 import { resolveGeminiApiKey } from "./key-resolver";
 
 export interface DeepAnalysisResult {
@@ -34,7 +35,7 @@ export class GeminiJobAgent {
     posting: UnifiedJobPosting,
     profile?: SearchProfile
   ): Promise<DeepAnalysisResult> {
-    const activeProfile = profile || loadSearchProfile();
+    const activeProfile = profile || await getSearchProfile(getRepository().repository);
 
     if (!this.ai) {
       // Offline / Fallback mode
@@ -112,7 +113,7 @@ Return valid JSON only.
     userNotes?: string,
     profile?: SearchProfile
   ): Promise<CoverLetterResult> {
-    const activeProfile = profile || loadSearchProfile();
+    const activeProfile = profile || await getSearchProfile(getRepository().repository);
 
     if (!this.ai) {
       return {

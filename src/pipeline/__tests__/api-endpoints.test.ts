@@ -1,6 +1,8 @@
 import assert from "node:assert";
+import fs from "node:fs";
 import http from "node:http";
-import app from "../../server";
+import os from "node:os";
+import path from "node:path";
 
 console.log("=== Running End-to-End HTTP API Endpoint Tests ===");
 
@@ -64,6 +66,12 @@ function makeRequest(
 }
 
 async function runApiTests() {
+  const originalEnv = { ...process.env };
+  const testDataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "job-tracker-api-"));
+  process.env.NODE_ENV = "test";
+  process.env.JOB_TRACKER_FORCE_FILE = "true";
+  process.env.JOB_TRACKER_STORE_PATH = path.join(testDataDirectory, "job_tracker_store.json");
+  const app = require("../../server").default;
   // Start ephemeral test server on random port
   const testServer = http.createServer(app);
   await new Promise<void>((resolve) => testServer.listen(0, "127.0.0.1", () => resolve()));
@@ -95,6 +103,30 @@ async function runApiTests() {
     assert.strictEqual(updateRes.body.profile.bio, updatedBio, "Updated bio matches");
     console.log("✓ PUT /api/candidate-profile persisted updated profile to repository");
 
+    // 2a. Test resume upload persists normalized resume and derived profile to the repository
+    const resumeUploadRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/candidate-profile/upload-resume",
+      body: {
+        fileName: "api-test-resume.json",
+        content: JSON.stringify({
+          basics: { name: "API Test Candidate", label: "Platform Engineer" },
+          work: [{ company: "Example Co", position: "Engineer", startDate: "2020-01", endDate: "2024-01" }],
+          skills: [{ name: "Backend", keywords: ["Node.js", "PostgreSQL"] }],
+        }),
+      },
+    });
+    assert.strictEqual(resumeUploadRes.statusCode, 200);
+    const reloadedProfileRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/candidate-profile",
+    });
+    assert.strictEqual(reloadedProfileRes.statusCode, 200);
+    assert.strictEqual(reloadedProfileRes.body.resumeData.basics.name, "API Test Candidate");
+    assert.strictEqual(reloadedProfileRes.body.profile.targetTitle, "Platform Engineer");
+    assert.ok(reloadedProfileRes.body.profile.skills.includes("PostgreSQL"));
+    console.log("✓ Resume upload and derived candidate profile reload from the selected repository");
+
     // 2b. Test GET & PUT /api/search-profile repository persistence
     console.log("[Test 2b] Testing GET /api/search-profile & PUT /api/search-profile...");
     const searchRes = await makeRequest(testServer, {
@@ -114,6 +146,11 @@ async function runApiTests() {
     });
     assert.strictEqual(putSearchRes.statusCode, 200, "Search profile PUT returns 200");
     assert.strictEqual(putSearchRes.body.profile.name, "Updated Full-Stack Remote");
+    const persistedSearchRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/search-profile",
+    });
+    assert.strictEqual(persistedSearchRes.body.profile.name, "Updated Full-Stack Remote");
     console.log("✓ GET & PUT /api/search-profile persisted to repository");
 
     // 3. Test POST /api/jobs/manual to create a test job
@@ -215,11 +252,101 @@ async function runApiTests() {
     assert.strictEqual(deleteAppRes.statusCode, 200, "Delete application returns 200");
     console.log("✓ DELETE /api/applications/:id deleted application cleanly");
 
+    // 10. Production guest boundary and public job sanitization
+    console.log("[Test 10] Testing production guest access boundaries...");
+    process.env.NODE_ENV = "production";
+    process.env.ALLOWED_USER_EMAIL = "owner@example.com";
+    delete process.env.API_SECRET_KEY;
+    for (const keyName of [
+      "GEMINI_API_KEY",
+      "DEVELOPMENT_GEMINI_API_KEY",
+      "PROD_GUEST_GEMINI_API_KEY_FREE",
+      "GUEST_GEMINI_API_KEY",
+      "PROD_GEMINI_API_KEY_FREE",
+      "PROD_GEMINI_API_KEY_PRO",
+      "GEMINI_API_KEY_FREE",
+      "GEMINI_API_KEY_PRO",
+    ]) {
+      delete process.env[keyName];
+    }
+
+    const sessionRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/session",
+    });
+    assert.strictEqual(sessionRes.statusCode, 200);
+    assert.strictEqual(sessionRes.body.role, "guest");
+
+    const guestJobsRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/jobs?limit=50",
+    });
+    assert.strictEqual(guestJobsRes.statusCode, 200);
+    const guestJob = guestJobsRes.body.postings.find((posting: any) => posting.id === createdJob.id);
+    assert.ok(guestJob, "Guest can browse public job postings");
+    for (const privateField of ["job_status", "jev_fit", "jev_confidence", "ai_analysis", "user_overrides", "crawler_data"]) {
+      assert.ok(!(privateField in guestJob), `Guest job DTO must omit ${privateField}`);
+    }
+
+    const guestJobRes = await makeRequest(testServer, {
+      method: "GET",
+      path: `/api/jobs/${createdJob.id}`,
+    });
+    assert.strictEqual(guestJobRes.statusCode, 200);
+    assert.ok(!("job_status" in guestJobRes.body.job), "Guest job detail must omit owner workflow status");
+
+    for (const privatePath of [
+      "/api/candidate-profile",
+      "/api/profile",
+      "/api/applications",
+      "/api/dashboard/metrics",
+      "/api/agent/conversations",
+    ]) {
+      const privateRes = await makeRequest(testServer, { method: "GET", path: privatePath });
+      assert.strictEqual(privateRes.statusCode, 403, `${privatePath} must be owner-only`);
+    }
+
+    process.env.API_SECRET_KEY = "api-test-owner-token";
+    const ownerHeaders = { authorization: "Bearer api-test-owner-token" };
+    const beforeGuestChat = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/agent/conversations",
+      headers: ownerHeaders,
+    });
+    assert.strictEqual(beforeGuestChat.statusCode, 200);
+
+    const guestChatRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/agent/guest-chat",
+      body: {
+        message: "Summarize this role.",
+        jobId: createdJob.id,
+        history: [{ role: "user", content: "What should I look for?" }],
+      },
+    });
+    assert.strictEqual(guestChatRes.statusCode, 200, "Guest chat is available without owner authentication");
+    assert.strictEqual(guestChatRes.body.aiTelemetry.role, "guest");
+
+    const afterGuestChat = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/agent/conversations",
+      headers: ownerHeaders,
+    });
+    assert.strictEqual(afterGuestChat.statusCode, 200);
+    assert.strictEqual(
+      afterGuestChat.body.count,
+      beforeGuestChat.body.count,
+      "Guest chat must not persist into the owner's conversation directory"
+    );
+    console.log("✓ Guest job reads are sanitized, private APIs are denied, and guest AI is isolated");
+
     console.log("\n==========================================================");
     console.log("  ALL END-TO-END HTTP API TESTS PASSED WITH 100% SUCCESS! ");
     console.log("==========================================================\n");
   } finally {
     testServer.close();
+    process.env = originalEnv;
+    fs.rmSync(testDataDirectory, { recursive: true, force: true });
   }
 }
 

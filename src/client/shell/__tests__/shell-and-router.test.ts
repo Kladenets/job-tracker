@@ -25,7 +25,7 @@ console.log("  ✔ All 5 required application routes correctly configured in Tan
 const shell = useShellStore.getState();
 
 // Test initial default state
-assert.strictEqual(shell.userRole, "owner", "Default user role must be owner");
+assert.strictEqual(shell.userRole, "guest", "Default user role must be guest until the server resolves the session");
 
 // Test sidebar toggle
 const initialCollapsed = shell.sidebarCollapsed;

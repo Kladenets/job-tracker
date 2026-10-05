@@ -1,5 +1,5 @@
 import { Tool, ToolContext } from "../tool";
-import { normalizeStructuredResume, persistResumeAndProfile } from "../../../utils/resume-sync";
+import { deriveProfileFromResume, getCandidateProfile, normalizeStructuredResume } from "../../../utils/resume-sync";
 
 export class IngestResumeTool implements Tool {
   readonly name = "ingest_resume";
@@ -21,7 +21,7 @@ export class IngestResumeTool implements Tool {
     required: ["raw_text"],
   };
 
-  async execute(params: unknown, _context: ToolContext): Promise<string> {
+  async execute(params: unknown, context: ToolContext): Promise<string> {
     const args = (typeof params === "object" && params !== null ? params : {}) as {
       raw_text?: string;
       source_name?: string;
@@ -46,10 +46,13 @@ export class IngestResumeTool implements Tool {
       }
 
       const structured = normalizeStructuredResume(parsedJson);
-      const result = persistResumeAndProfile(structured, {
+      const currentProfile = await getCandidateProfile(context.repository);
+      const result = deriveProfileFromResume(structured, {
         type: "file_upload",
         fileName: args.source_name || "Agent Ingested Resume",
-      });
+      }, currentProfile);
+      await context.repository.saveUserProfile("candidate_profile", result.profile);
+      await context.repository.saveUserProfile("candidate_resume", result.resumeData);
 
       return JSON.stringify({
         success: true,

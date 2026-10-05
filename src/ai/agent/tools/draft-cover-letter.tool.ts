@@ -51,8 +51,8 @@ export class DraftCoverLetterTool implements Tool {
 
     conversation.tagJobId(targetJob.id);
 
-    const candidate = getCandidateProfile();
-    const resume = getCandidateResume();
+    const candidate = await getCandidateProfile(repository);
+    const resume = await getCandidateResume(repository);
     const candidateName = candidate.fullName || resume.basics?.name || "Candidate";
     const candidateEmail = candidate.email || resume.basics?.email || "";
 

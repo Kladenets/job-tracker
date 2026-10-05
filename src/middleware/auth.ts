@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 export interface AuthenticatedUser {
   email: string;
@@ -21,83 +22,132 @@ declare global {
  * 3. Production: checks Cloudflare Access identity headers (Cf-Access-Authenticated-User-Email)
  *    and verifies the email against ALLOWED_USER_EMAIL.
  * 4. Token fallback: checks Authorization: Bearer <API_SECRET_KEY> for automated cron/triggers.
- * 5. Public Guest mode: unauthenticated requests to read-only endpoints and conversational agents
- *    receive role: "guest". Mutations from guests are rejected with 403 Forbidden.
+ * 5. Public Guest mode: only explicitly allowlisted public reads and the isolated guest-chat
+ *    endpoint receive role: "guest". All other API routes require owner credentials.
  */
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
-  // Public operational endpoints
-  if (req.path === "/api/health" || req.path === "/health" || req.path === "/") {
-    return next();
+type AccessTokenVerifier = (token: string, teamDomain: string, audience: string) => Promise<string>;
+
+const remoteJwkSets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
+async function verifyCloudflareAccessToken(
+  token: string,
+  teamDomain: string,
+  audience: string
+): Promise<string> {
+  const issuer = new URL(teamDomain);
+  if (issuer.protocol !== "https:") throw new Error("Cloudflare team domain must use HTTPS");
+  issuer.pathname = issuer.pathname.replace(/\/$/, "");
+  issuer.search = "";
+  issuer.hash = "";
+
+  const issuerUrl = issuer.toString().replace(/\/$/, "");
+  let jwks = remoteJwkSets.get(issuerUrl);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(`${issuerUrl}/cdn-cgi/access/certs`));
+    remoteJwkSets.set(issuerUrl, jwks);
   }
 
-  const isProduction = process.env.NODE_ENV === "production";
-  const authBypassDev = process.env.AUTH_BYPASS_DEV === "true";
+  const { payload } = await jwtVerify(token, jwks, { issuer: issuerUrl, audience });
+  if (typeof payload.email !== "string" || payload.email.trim() === "") {
+    throw new Error("Cloudflare Access token is missing an email claim");
+  }
+  return payload.email;
+}
 
-  // Bearer token check (for automated scheduler / script triggers)
-  const authHeader = req.headers.authorization;
-  const apiSecretKey = process.env.API_SECRET_KEY;
-  if (apiSecretKey && authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token === apiSecretKey) {
+export function createAuthMiddleware(verifyAccessToken: AccessTokenVerifier = verifyCloudflareAccessToken) {
+  return async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const isReadOnly = req.method === "GET" || req.method === "HEAD";
+
+    // Public operational endpoints
+    if (isReadOnly && (req.path === "/api/health" || req.path === "/health" || req.path === "/")) {
+      return next();
+    }
+
+    const isProduction = process.env.NODE_ENV === "production";
+    const authBypassDev = process.env.AUTH_BYPASS_DEV === "true";
+
+    // Bearer token check (for automated scheduler / script triggers)
+    const authHeader = req.headers.authorization;
+    const apiSecretKey = process.env.API_SECRET_KEY;
+    if (apiSecretKey && authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7).trim();
+      if (token === apiSecretKey) {
+        req.user = {
+          email: process.env.ALLOWED_USER_EMAIL || "system@local",
+          role: "owner",
+          authSource: "bearer-token",
+        };
+        return next();
+      }
+    }
+
+    const cfUserEmailHeader = req.headers["cf-access-authenticated-user-email"];
+    const cfUserEmail = typeof cfUserEmailHeader === "string" ? cfUserEmailHeader : undefined;
+    const cfJwtHeader = req.headers["cf-access-jwt-assertion"];
+    const cfJwt = typeof cfJwtHeader === "string" ? cfJwtHeader : undefined;
+    const allowedEmail = process.env.ALLOWED_USER_EMAIL?.trim().toLowerCase();
+
+    if (cfUserEmail || cfJwt) {
+      const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN?.trim();
+      const audience = process.env.CF_ACCESS_AUD?.trim();
+      if (!cfUserEmail || !cfJwt || !allowedEmail || !teamDomain || !audience) {
+        res.status(403).json({ error: "Forbidden", message: "Valid Cloudflare Access credentials are required." });
+        return;
+      }
+
+      try {
+        const verifiedEmail = (await verifyAccessToken(cfJwt, teamDomain, audience)).trim().toLowerCase();
+        const headerEmail = cfUserEmail.trim().toLowerCase();
+        if (verifiedEmail !== allowedEmail || headerEmail !== verifiedEmail) {
+          res.status(403).json({ error: "Forbidden", message: "Your authenticated email is not authorized to access this instance." });
+          return;
+        }
+
+        req.user = {
+          email: verifiedEmail,
+          role: "owner",
+          authSource: "cloudflare-access",
+        };
+        return next();
+      } catch {
+        res.status(403).json({ error: "Forbidden", message: "Cloudflare Access token validation failed." });
+        return;
+      }
+    }
+
+    // Local development / non-production environment allowance
+    if (!isProduction || authBypassDev) {
       req.user = {
-        email: process.env.ALLOWED_USER_EMAIL || "system@local",
+        email: allowedEmail || "developer@local",
         role: "owner",
-        authSource: "bearer-token",
+        authSource: "local-development",
       };
       return next();
     }
-  }
 
-  // Cloudflare Access headers check
-  const cfUserEmail = req.headers["cf-access-authenticated-user-email"] as string | undefined;
-  const allowedEmail = process.env.ALLOWED_USER_EMAIL?.trim().toLowerCase();
+    // Guest access is an explicit allowlist. Other API routes fail closed.
+    const isPublicGuestRoute =
+      (isReadOnly &&
+        (req.path === "/api/session" ||
+          req.path === "/api/jobs" ||
+          /^\/api\/jobs\/[^/]+$/.test(req.path))) ||
+      (req.method === "POST" && req.path === "/api/agent/guest-chat") ||
+      (!req.path.startsWith("/api") && isReadOnly);
 
-  if (cfUserEmail) {
-    const normalizedCfEmail = cfUserEmail.trim().toLowerCase();
-    if (allowedEmail && normalizedCfEmail !== allowedEmail) {
-      res.status(403).json({
-        error: "Forbidden",
-        message: "Your authenticated email is not authorized to access this private instance.",
-      });
-      return;
+    if (isPublicGuestRoute) {
+      req.user = {
+        email: "guest@public",
+        role: "guest",
+        authSource: "public-guest",
+      };
+      return next();
     }
 
-    req.user = {
-      email: normalizedCfEmail,
-      role: "owner",
-      authSource: "cloudflare-access",
-    };
-    return next();
-  }
-
-  // Local development / non-production environment allowance
-  if (!isProduction || authBypassDev) {
-    req.user = {
-      email: allowedEmail || "developer@local",
-      role: "owner",
-      authSource: "local-development",
-    };
-    return next();
-  }
-
-  // Guest Portfolio Mode in production:
-  // Read-only endpoints (/api/jobs, /api/jobs/:id) and conversational agent endpoints
-  // are allowed in guest mode. Mutations are rejected.
-  const isReadOnly = req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
-  const isAgentChat = req.path.startsWith("/api/agent/conversations");
-
-  if (isReadOnly || isAgentChat) {
-    req.user = {
-      email: "guest@public",
-      role: "guest",
-      authSource: "public-guest",
-    };
-    return next();
-  }
-
-  // If attempting mutations in production without valid Cloudflare Access headers or valid bearer token
-  res.status(401).json({
-    error: "Unauthorized",
-    message: "Missing trusted edge authentication headers or valid credentials.",
-  });
+    res.status(403).json({
+      error: "Forbidden",
+      message: "This resource requires an authenticated owner session.",
+    });
+  };
 }
+
+export const authMiddleware = createAuthMiddleware();

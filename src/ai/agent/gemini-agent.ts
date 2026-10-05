@@ -3,7 +3,7 @@ import { Conversation, ToolCallExecution } from "./conversation";
 import { Tool, ToolContext } from "./tool";
 import { createDefaultTools } from "./tools";
 import { getRepository } from "../../db";
-import { loadSearchProfile } from "../../config/search-profile";
+import { getSearchProfile } from "../../config/search-profile";
 import { resolveGeminiApiKey, triggerProFailover, isFailoverActive } from "../key-resolver";
 
 export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
@@ -87,7 +87,7 @@ export class GeminiAgent {
     conversation.compactHistory(14, 6);
 
     const repository = contextOverrides?.repository || getRepository().repository;
-    const profile = contextOverrides?.profile || loadSearchProfile();
+    const profile = contextOverrides?.profile || await getSearchProfile(repository);
     const context: ToolContext = {
       repository,
       profile,

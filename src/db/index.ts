@@ -12,7 +12,8 @@ export function getRepository(): { repository: JobPostingRepository; engine: "po
     return { repository: activeRepository, engine: activeEngine };
   }
 
-  const pool = getDatabasePool();
+  const forceFileRepository = process.env.JOB_TRACKER_FORCE_FILE === "true";
+  const pool = forceFileRepository ? null : getDatabasePool();
   if (pool && !postgresAttemptFailed && isDbConnected()) {
     try {
       activeRepository = new PostgresJobRepository(pool);
@@ -25,7 +26,7 @@ export function getRepository(): { repository: JobPostingRepository; engine: "po
     }
   }
 
-  activeRepository = new FileJobRepository();
+  activeRepository = new FileJobRepository(process.env.JOB_TRACKER_STORE_PATH);
   activeEngine = "file";
   console.log("[Persistence] Active repository: Local File Storage (data/job_tracker_store.json)");
   return { repository: activeRepository, engine: "file" };

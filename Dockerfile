@@ -12,8 +12,6 @@ RUN npm ci
 
 # Copy full application source code
 COPY src/ ./src/
-COPY config/ ./config/
-COPY data/ ./data/
 
 # Compile TypeScript into JavaScript (outputs to dist/)
 RUN npm run build
@@ -35,11 +33,7 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy compiled JavaScript output from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy runtime configuration and default baseline profiles
-COPY config/ ./config/
-COPY data/ ./data/
-
-# Ensure runtime directory permissions for non-root user 'node'
+# Prepare ignored runtime storage and permissions for non-root user 'node'.
 RUN mkdir -p /app/data && chown -R node:node /app
 
 # Drop root privileges and run as non-privileged system user

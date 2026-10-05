@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShellStore } from "./shell-store";
 
 export interface ChatMessage {
   id: string;
@@ -46,6 +47,7 @@ interface AIDockState {
   conversations: ConversationSummary[];
   activeConversationId: string | null;
   isLoadingConversations: boolean;
+  resetGuestSession: () => void;
   fetchConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   startNewConversation: (initialJob?: JobContextSummary, initialPrompt?: string) => Promise<void>;
@@ -115,7 +117,36 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
   activeConversationId: getInitialActiveConvId(),
   isLoadingConversations: false,
 
+  resetGuestSession: () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(AI_DOCK_ACTIVE_CONV_KEY);
+      localStorage.setItem(AI_DOCK_VIEW_KEY, "list");
+    }
+    set({
+      dockView: "list",
+      conversations: [],
+      activeConversationId: null,
+      isLoadingConversations: false,
+      activeJobContext: null,
+      messages: [
+        {
+          id: "welcome-guest",
+          role: "assistant",
+          content: "Welcome to the public AI demo. Ask about a job posting or career preparation.",
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      isGenerating: false,
+      error: null,
+    });
+  },
+
   fetchConversations: async () => {
+    if (useShellStore.getState().userRole === "guest") {
+      set({ conversations: [], isLoadingConversations: false });
+      return;
+    }
+
     try {
       set({ isLoadingConversations: true });
       const res = await fetch("/api/agent/conversations");
@@ -181,6 +212,8 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
   },
 
   selectConversation: async (id: string) => {
+    if (useShellStore.getState().userRole === "guest") return;
+
     try {
       set({
         activeConversationId: id,
@@ -247,6 +280,31 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
   },
 
   startNewConversation: async (initialJob?: JobContextSummary, initialPrompt?: string) => {
+    if (useShellStore.getState().userRole === "guest") {
+      const guestConversationId = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      get().setIsOpen(true);
+      get().setDockView("chat");
+      set({
+        activeConversationId: guestConversationId,
+        activeJobContext: initialJob || null,
+        isOpen: true,
+        dockView: "chat",
+        messages: [
+          {
+            id: "welcome-guest-chat",
+            role: "assistant",
+            content: initialJob
+              ? `Ask me about ${initialJob.title} at ${initialJob.company}.`
+              : "Hello! What would you like to know about job search or interview preparation?",
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        error: null,
+      });
+      if (initialPrompt) void get().sendMessage(initialPrompt);
+      return;
+    }
+
     try {
       const title = initialJob
         ? `${initialJob.company}: ${initialJob.title.slice(0, 20)}...`
@@ -300,6 +358,8 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
   },
 
   deleteConversation: async (id: string) => {
+    if (useShellStore.getState().userRole === "guest") return;
+
     try {
       await fetch(`/api/agent/conversations/${id}`, { method: "DELETE" });
       const currentActive = get().activeConversationId;
@@ -381,6 +441,7 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
 
   sendMessage: async (prompt: string) => {
     const state = get();
+    const isGuest = useShellStore.getState().userRole === "guest";
     if (!prompt.trim() || state.isGenerating) return;
 
     let convId = state.activeConversationId;
@@ -422,10 +483,29 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
         messagePayload = `[Context: Job ID ${state.activeJobContext.id} - ${state.activeJobContext.title} at ${state.activeJobContext.company}]\n\n${messagePayload}`;
       }
 
-      const msgRes = await fetch(`/api/agent/conversations/${convId}/messages`, {
+      const guestHistory = state.messages
+        .filter((message) =>
+          (message.role === "user" || message.role === "assistant") &&
+          !message.id.startsWith("welcome") &&
+          !message.isStreaming
+        )
+        .slice(-12)
+        .map(({ role, content }) => ({ role, content }));
+      const endpoint = isGuest
+        ? "/api/agent/guest-chat"
+        : `/api/agent/conversations/${convId}/messages`;
+      const body = isGuest
+        ? {
+            message: prompt.trim(),
+            jobId: state.activeJobContext?.id,
+            history: guestHistory,
+          }
+        : { message: messagePayload };
+
+      const msgRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messagePayload }),
+        body: JSON.stringify(body),
       });
 
       if (!msgRes.ok) {
@@ -448,7 +528,7 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
           clearInterval(interval);
           get().finishStreamingMessage(msgData.toolCalls);
           // Refresh conversations to get updated title & snippet
-          get().fetchConversations();
+          if (!isGuest) get().fetchConversations();
         }
       }, 20);
     } catch (err: unknown) {

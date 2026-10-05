@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { useAIDockStore } from "../ai-dock-store";
+import { useShellStore } from "../shell-store";
 import { getAIStatusDescriptor } from "../ai-status-helper";
 
 console.log("Running AI Assistant Dock Unit Tests...");
@@ -147,4 +148,58 @@ assert.strictEqual(finishedMsg.isStreaming, false, "finishStreamingMessage must 
 assert.strictEqual(finishedMsg.toolCalls?.length, 1, "finishStreamingMessage must record executed tool calls");
 
 console.log("  ✔ Streaming message state transitions verified");
+
+async function verifyGuestThreadReuse() {
+  const originalFetch = globalThis.fetch;
+  const originalRole = useShellStore.getState().userRole;
+  const previousState = useAIDockStore.getState();
+  const requestBodies: Array<{ url: string; body: any }> = [];
+
+  useShellStore.getState().setUserRole("guest");
+  useAIDockStore.setState({
+    activeConversationId: "guest-session-1",
+    activeJobContext: null,
+    messages: [
+      { id: "welcome-guest", role: "assistant", content: "Welcome", timestamp: "now" },
+      { id: "prior-user", role: "user", content: "First question", timestamp: "now" },
+      { id: "prior-assistant", role: "assistant", content: "First answer", timestamp: "now" },
+    ],
+    isGenerating: false,
+  });
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requestBodies.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+    return { ok: true, json: async () => ({ text: "Second answer" }) } as Response;
+  }) as typeof fetch;
+
+  try {
+    await useAIDockStore.getState().sendMessage("Second question");
+    assert.strictEqual(requestBodies.length, 1);
+    assert.strictEqual(requestBodies[0].url, "/api/agent/guest-chat");
+    assert.deepStrictEqual(requestBodies[0].body.history, [
+      { role: "user", content: "First question" },
+      { role: "assistant", content: "First answer" },
+    ]);
+    assert.strictEqual(useAIDockStore.getState().activeConversationId, "guest-session-1");
+    assert.ok(useAIDockStore.getState().messages.some((message) => message.id === "prior-user"));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    globalThis.fetch = originalFetch;
+    useShellStore.getState().setUserRole(originalRole);
+    useAIDockStore.setState({
+      activeConversationId: previousState.activeConversationId,
+      activeJobContext: previousState.activeJobContext,
+      messages: previousState.messages,
+      isGenerating: false,
+    });
+  }
+
+  console.log("  ✔ Guest chat reuses its in-memory thread and includes prior turns");
+}
+
+verifyGuestThreadReuse().catch((error: unknown) => {
+  console.error("Guest chat continuity test failed:", error);
+  process.exitCode = 1;
+});
+
 console.log("All Chunk 3 AI Assistant Dock tests passed successfully!\n");

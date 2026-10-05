@@ -5,7 +5,7 @@ import { getRepository } from "../db";
 import { JobPostingRepository } from "../db/repository-interface";
 import { evaluateDeterministicFilter } from "./deterministic-filter";
 import { jevClassifier, FitClassifier } from "../ai/jev-classifier";
-import { SearchProfile, loadSearchProfile } from "../config/search-profile";
+import { SearchProfile, getSearchProfile } from "../config/search-profile";
 
 export interface PipelineIngestResult {
   totalProcessed: number;
@@ -49,7 +49,7 @@ export async function ingestRawPostings(
   options?: IngestOptions
 ): Promise<PipelineIngestResult> {
   const repository = options?.customRepo || getRepository().repository;
-  const profile = options?.customProfile || loadSearchProfile();
+  const profile = options?.customProfile || await getSearchProfile(repository);
   const classifier = options?.customClassifier || jevClassifier;
 
   let newImported = 0;

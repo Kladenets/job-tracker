@@ -16,8 +16,10 @@ import {
   PanelRightClose,
 } from "lucide-react";
 import { useAIDockStore, ConversationSummary } from "./ai-dock-store";
+import { useShellStore } from "./shell-store";
 
 export function AIDock() {
+  const userRole = useShellStore((state) => state.userRole);
   const {
     isOpen,
     dockView,
@@ -49,7 +51,7 @@ export function AIDock() {
     if (isOpen) {
       fetchConversations();
     }
-  }, [isOpen, fetchConversations]);
+  }, [isOpen, userRole, fetchConversations]);
 
   // Auto-scroll to bottom of conversation in chat view
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { UnifiedJobPosting } from "../types/job-posting";
-import { SearchProfile, loadSearchProfile } from "../config/search-profile";
+import { SearchProfile, getSearchProfile } from "../config/search-profile";
+import { getRepository } from "../db";
 
 export interface JevFitDecision {
   fit: boolean;
@@ -49,7 +50,7 @@ export function buildJevInputPayload(posting: UnifiedJobPosting, profile: Search
 export class SimulatedJevClassifier implements FitClassifier {
   async classify(posting: UnifiedJobPosting, profile?: SearchProfile): Promise<JevFitDecision> {
     const startTime = Date.now();
-    const activeProfile = profile || loadSearchProfile();
+    const activeProfile = profile || await getSearchProfile(getRepository().repository);
     const candidateSkills = new Set(activeProfile.candidate.skills.map((s) => s.toLowerCase()));
 
     const detectedTech = (posting.crawler_data?.detected_technologies || []).map((t) => t.toLowerCase());
@@ -88,7 +89,7 @@ export class TypeSafeJevClassifier implements FitClassifier {
   private fallback = new SimulatedJevClassifier();
 
   async classify(posting: UnifiedJobPosting, profile?: SearchProfile): Promise<JevFitDecision> {
-    const activeProfile = profile || loadSearchProfile();
+    const activeProfile = profile || await getSearchProfile(getRepository().repository);
     const apiKey = (process.env.TYPESAFE_API_KEY || process.env.TYPESAFE_AI_API_KEY || "").trim();
     let endpoint = (process.env.TYPESAFE_API_ENDPOINT || "https://api.typesafe.ai/v1/systemone").trim();
     if (endpoint.endsWith("/v1/noul") || endpoint.endsWith("/noul")) {

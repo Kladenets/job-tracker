@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
+import { JobPostingRepository } from "../db/repository-interface";
+import { getCandidateProfile } from "../utils/resume-sync";
 
 export const SearchProfileSchema = z.object({
   id: z.string().default("profile-default-fullstack"),
@@ -78,26 +80,6 @@ export function loadSearchProfile(customPath?: string): SearchProfile {
       const content = fs.readFileSync(filePath, "utf-8");
       const parsed = JSON.parse(content);
 
-      // Merge candidate profile skills and target titles if present
-      const candidateProfilePath = path.join(process.cwd(), "config", "candidate_profile.json");
-      if (fs.existsSync(candidateProfilePath)) {
-        try {
-          const cand = JSON.parse(fs.readFileSync(candidateProfilePath, "utf-8"));
-          if (Array.isArray(cand.skills) && cand.skills.length > 0) {
-            const combinedSkills = Array.from(new Set([...(parsed.candidate?.skills || []), ...cand.skills]));
-            parsed.candidate = {
-              ...parsed.candidate,
-              skills: combinedSkills,
-              targetTitles: cand.targetTitle
-                ? Array.from(new Set([cand.targetTitle, ...(parsed.candidate?.targetTitles || [])]))
-                : (parsed.candidate?.targetTitles || []),
-            };
-          }
-        } catch {
-          // ignore error reading candidate profile
-        }
-      }
-
       const validated = SearchProfileSchema.parse(parsed);
       cachedProfile = validated;
       lastLoadedTime = now;
@@ -132,4 +114,30 @@ export function loadSearchProfile(customPath?: string): SearchProfile {
   cachedProfile = defaultProfile;
   lastLoadedTime = now;
   return defaultProfile;
+}
+
+export async function getSearchProfile(repository: JobPostingRepository): Promise<SearchProfile> {
+  const storedProfile = await repository.getUserProfile("search_profile");
+  const baseProfile = storedProfile
+    ? SearchProfileSchema.parse(storedProfile)
+    : loadSearchProfile();
+
+  if (!storedProfile) {
+    await repository.saveUserProfile("search_profile", baseProfile);
+  }
+
+  const candidate = await getCandidateProfile(repository);
+  const candidateSkills = Array.isArray(candidate.skills) ? candidate.skills.filter((skill: unknown) => typeof skill === "string") : [];
+  const candidateTitles = candidate.targetTitle
+    ? Array.from(new Set([candidate.targetTitle, ...baseProfile.candidate.targetTitles]))
+    : baseProfile.candidate.targetTitles;
+
+  return SearchProfileSchema.parse({
+    ...baseProfile,
+    candidate: {
+      ...baseProfile.candidate,
+      skills: candidateSkills.length > 0 ? candidateSkills : baseProfile.candidate.skills,
+      targetTitles: candidateTitles,
+    },
+  });
 }
