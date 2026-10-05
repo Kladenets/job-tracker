@@ -148,8 +148,9 @@ The deterministic prefilter acts as an inexpensive, rule-based qualification gat
    - **Language Constraints:** Exclude postings where the job text is in an unread language.
 
 ### Externalized Configuration:
-- Filter rules and thresholds must be externalized in code/settings configuration files (e.g., `config/search_profile.json` or YAML/Python settings module).
-- The architecture must allow reading these settings cleanly at runtime so future UI-based configuration and KV persistence can update them without redeploying application code.
+- Filter rules and thresholds are stored in the active search-profile record in the selected repository. PostgreSQL `user_profiles` is canonical when PostgreSQL is selected.
+- The file-backed repository is used for local development/API tests without PostgreSQL. Ignored local profile JSON may seed an empty repository once; application writes update the repository and do not write back to config files.
+- The architecture must allow reading these settings cleanly at runtime so UI-managed repository values can change without redeploying application code.
 
 ### Auditability & Re-execution:
 - Every rule failure records: `rule_id`, `rule_name`, `passed: false`, and `evidence` (the specific text excerpt or normalized attribute matched).

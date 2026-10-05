@@ -91,7 +91,8 @@ sources/manual URL
   -> fetch and extract
   -> normalize and deduplicate
   -> deterministic hard filters
-  -> deterministic weighted score
+  -> deterministic binary hard filters
+  -> JEV fit classification and confidence ranking
   -> AI analysis for eligible jobs
   -> recommendation and user review
   -> application tracking
@@ -121,7 +122,8 @@ AI must not be used for checks that can be performed reliably with normalized fi
 
 ### 8.2 Privacy and safety
 
-- Keep candidate and application data local by default.
+- Keep candidate and application data in the user's private persistence repository. PostgreSQL is canonical when configured; the file-backed repository is for local development and tests.
+- Candidate-profile, structured-resume, and search-profile JSON seed files are local-only, ignored by Git, and excluded from production images. Runtime writes go through the selected repository.
 - Never commit API keys, resumes, generated application content, or the database.
 - Explicitly show what content will be sent to an AI provider before enabling AI features.
 - Send only the minimum candidate data needed for a task.
@@ -133,7 +135,7 @@ AI must not be used for checks that can be performed reliably with normalized fi
 - Ingestion, extraction, filtering, AI analysis, and status checks must be independently retryable.
 - Runs must be idempotent: retrying must not create duplicate jobs, analyses, or applications.
 - Failed AI analysis must leave the normalized job available for manual review.
-- Rate limits must use configurable concurrency, retry with backoff and jitter, and a daily request/token budget.
+- Source requests and owner AI usage must use configurable concurrency, retry with backoff and jitter, and owner-tier daily request/token budgets. Public guest chat uses a separate provider key; the MVP intentionally applies no application-level guest request/token budget and relies on the provider's quota for that key.
 
 ### 8.4 Observability
 

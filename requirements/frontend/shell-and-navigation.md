@@ -102,10 +102,11 @@ All active filter state is bidirectionally serialized into URL search parameters
   - Streaming token feed, contextual quick prompts, and input box.
 
 ### 5.3 State & Viewport Memory
-- **Persistent Memory:** The dock state remembers:
+- **Owner Persistent Memory:** The dock state remembers across close/reopen and page reload:
   - `isOpen: boolean`
   - `dockView: 'list' | 'chat'` (if closed on the list view, reopening restores the list view).
   - `activeConversationId: string | null` (if closed inside an active conversation, reopening restores that exact thread).
+- **Guest Demo Memory:** Guest chat has no server-side conversation record. The active guest thread is retained in client memory when the dock closes/reopens, and is cleared on page reload. It must never load or persist owner conversation IDs/history.
 - **Split AI Top-Bar Button:**
   - **Left Half (Main Status Toggle):** Icon (`Sparkles`) with a semantic status circle badge (🟢 Solid Emerald = Ready; 🟠 Pulsing Amber = Generating/Streaming). Clicking toggles the dock open/closed preserving the remembered view.
   - **Right Half (Quick-New Spawn):** Icon (`Plus`). Clicking immediately opens the dock and starts a fresh conversation in View 2 (`startNewConversation()`).

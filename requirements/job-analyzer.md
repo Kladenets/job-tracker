@@ -65,7 +65,8 @@ Raw, messy web boilerplate is never sent to JEV. Missing attributes (e.g. unknow
 
 ### Local Testing & Developer Ergonomics
 - Interactive Terminal REPL (`src/scripts/chat.ts` / `npm run agent:chat`): Allows developers to chat directly in the terminal with live streaming/turns, tool execution feedback, `/history`, and `/exit` commands before a full web UI is built.
-- REST Endpoints (`/api/agent/conversations`, `/api/agent/conversations/:id/message`): Standard endpoints for `curl` testing and web frontend chat windows.
+- Owner REST Endpoints: `POST /api/agent/conversations`, `GET /api/agent/conversations`, `GET /api/agent/conversations/:id`, `POST /api/agent/conversations/:id/messages`, and `DELETE /api/agent/conversations/:id`. These use persistent owner conversation history.
+- Guest REST Endpoint: `POST /api/agent/guest-chat` accepts a bounded client-held history, uses public job context only, and does not persist a server conversation.
 
 ---
 
@@ -78,8 +79,8 @@ Raw, messy web boilerplate is never sent to JEV. Missing attributes (e.g. unknow
 
 ### Tier 2 (Interactive Agent):
 - Executed on-demand when the user clicks an action in the UI (e.g., "Analyze Fit", "Draft Cover Letter", "Prep Interview").
-- Governed by daily request/token budgets and rate limits.
-- If daily interactive budget is reached, user is notified and pending requests queue until reset.
+- Owner requests are governed by configured daily request/token budgets and provider rate limits. If the owner budget is reached, the user is notified and requests may queue until reset.
+- Public guest chat uses an isolated guest key and does not use the owner's budget. The MVP does not enforce an application-level guest request/token budget; the guest provider's own quota is the limit.
 
 ---
 

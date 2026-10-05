@@ -19,9 +19,9 @@ Provider-specific, source-specific, and database-specific details must not leak 
 
 ## Technology constraints
 
-- Backend: Python (FastAPI / Uvicorn) for the ingestion engine, jobspy bridge, PostgreSQL persistence, and API services.
-- Database: PostgreSQL for MVP persistence.
-- Client / Web UI: Modern web interface (Vite + React) served for local interaction.
+- Backend: Node.js with TypeScript and Express for the API and ingestion orchestration. Python is used only by the isolated JobSpy bridge.
+- Database: PostgreSQL is the primary persistence engine; the repository interface also supports a local file-backed store for offline development.
+- Client / Web UI: React 19 and Vite SPA served by the Express application in production and Vite middleware in development.
 - AI Architecture (Two-Tier Model):
   - **Tier 1 (Automated Fit Classification & Screening):** TypeSafe AI (JEV model) using typed boolean `noul` decisions with confidence scoring.
     - References:
@@ -30,10 +30,10 @@ Provider-specific, source-specific, and database-specific details must not leak 
     - *Platform Resiliency Requirement:* Because new signups for TypeSafe AI / JEV may be temporarily paused, the system must provide a provider-abstracted fallback / simulation adapter to enable full local development, testing, and execution until active credentials are acquired.
   - **Tier 2 (Interactive Conversational Agent):** `@google/genai` / Google Gen AI SDK using the modern Interactions API with multi-turn tool calling (JSON Schema functions), fluid job tagging, and persistent conversation history for deep analysis, cover letter drafting, interview preparation, and database job search. Tested locally via interactive CLI REPL and HTTP API.
     - *Operational note (Future consideration):* While the Interactions API is the primary engine for the MVP, future iterations may evaluate a secondary fallback to standard `models.generateContent` with function declarations if provider outages or quota partitions require multi-endpoint redundancy. For MVP, outages are surfaced cleanly via offline/resilience notifications.
-- Runtime validation: Pydantic / strict runtime schemas for external input, extracted source data, and AI outputs.
+- Runtime validation: Zod schemas for API inputs, source records, and AI outputs at TypeScript boundaries.
 - Testing: Automated unit, integration, and contract tests runnable through documented commands.
 
-The exact web framework, PostgreSQL query/migration layer, scheduler, and validation library are implementation decisions. Select them through short architecture decisions after testing compatibility with Bun.
+PostgreSQL access uses `pg` and versioned SQL migrations. The current MVP runs on Node.js; Bun compatibility is not a project requirement.
 
 ## Background work
 
@@ -44,8 +44,9 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 ## Configuration
 
 - Secrets come from environment variables or a local secret mechanism and are never returned to the browser.
-- Search profiles, deterministic filter criteria, and non-secret preferences are stored in externalized configuration files (e.g., `config/search_profile.json` or YAML/Python settings module).
-- Configuration is structured for runtime re-evaluation, paving the way for future UI-managed settings and KV storage without requiring code redeployment.
+- Candidate profiles, ingested structured resumes, search profiles, deterministic filter criteria, and non-secret preferences are persisted in PostgreSQL as validated JSONB profile records. PostgreSQL is the runtime source of truth.
+- The file-backed repository provides the same profile API for local development and API tests without PostgreSQL. It persists to an ignored local data file; untracked local profile JSON files may seed an empty repository once, but are never runtime write targets or production image contents.
+- Profile configuration is structured for runtime re-evaluation and UI management without code redeployment.
 - Validate configuration at startup and degrade gracefully when optional AI credentials are absent.
 - AI model IDs, budgets, timeouts, concurrency, retention, and crawl schedules are configurable.
 
@@ -61,7 +62,7 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 
 ## AI usage controls
 
-- Configure daily request and token budgets per provider/model.
+- Configure daily request and token budgets per owner provider/model. Guest chat uses an isolated provider key and has no application-level request/token cap in the MVP; provider-side quota remains the limit.
 - Estimate input size before calls and reject or truncate according to an explicit policy.
 - Record actual usage when available.
 - Avoid duplicate calls using the posting content hash, relevant profile state or hash, prompt/schema version, provider, and model.
@@ -82,7 +83,8 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 
 - Unit tests: normalization, rules, scoring, transitions, schemas, and permissions.
 - Contract tests: each source adapter against sanitized fixtures.
-- Integration tests: PostgreSQL migrations/repositories and end-to-end pipeline stages against a real disposable PostgreSQL database.
+- API tests: Run against an isolated temporary file-backed repository and do not require a PostgreSQL service.
+- PostgreSQL integration tests: When run, use a real disposable PostgreSQL database and a separate opt-in command; never use a developer's shared database.
 - AI evaluation tests: stored inputs and schema/evidence assertions; avoid requiring live calls in the default test suite.
 - UI tests: primary import, review, feedback, and application workflows.
 

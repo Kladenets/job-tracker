@@ -179,13 +179,15 @@ Conversations are persisted in the PostgreSQL database (`conversations` and `con
 
 The candidate profile must retain the approved information needed to assess jobs and draft truthful application content, including resume content, skills, experience, work preferences, location constraints, and work authorization where supplied.
 
-The MVP may store this as a versioned, validated JSON document. Before historical recommendation comparison or learned ranking is implemented, the system must preserve the candidate-profile state or hash used for each analysis.
+The candidate profile and normalized structured resume are stored as validated JSONB records in PostgreSQL `user_profiles` (`candidate_profile` and `candidate_resume` keys), which is the runtime source of truth regardless of whether the resume came from a URL or local upload. Writes update the repository only. The file-backed repository supports local testing without PostgreSQL and persists profile records in its ignored local data store. Untracked local JSON seeds may initialize an empty repository, but are not committed or embedded in production images.
+
+Before historical recommendation comparison or learned ranking is implemented, the system must preserve the candidate-profile state or hash used for each analysis.
 
 ### Search profile
 
 A search profile defines discovery queries, title aliases, deterministic qualification rules, compensation thresholds, location/workplace preferences, and candidate summary context used for JEV automated screening.
 
-The MVP stores this as an externalized configuration document (e.g., `config/search_profile.json` or dedicated relational table `search_profiles` with JSON settings).
+The MVP stores this as a validated JSONB record in PostgreSQL `user_profiles` under `search_profile`; PostgreSQL is the runtime source of truth. The file-backed repository stores the same record locally for tests and development without PostgreSQL.
 
 Expected search profile configuration:
 - `id`: UUID and human-readable profile name (e.g., "Full-Stack Remote & Local Hybrid").
@@ -253,7 +255,8 @@ If crawling and analysis run asynchronously, queued work must survive applicatio
   - frequently queried nullable filter fields (`location`, `workplace_type`, `salary_min`) to optimize filtering and missing-data queries (`WHERE salary_min IS NULL`, etc.);
   - queued-work scheduling and status.
 - Provide documented backup, restore, and machine-readable export procedures.
-- Integration tests must run against an isolated PostgreSQL database rather than a different in-memory database engine.
+- Default API tests use a fresh temporary file-backed repository and do not require PostgreSQL. They must not mutate developer profile/config files or a shared data store.
+- PostgreSQL migration/repository integration tests are a separate opt-in suite and must use an isolated disposable PostgreSQL database, never a shared development database.
 
 ## Retention and deletion
 

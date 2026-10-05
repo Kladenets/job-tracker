@@ -25,8 +25,9 @@
   - *"Draft Tailored Cover Letter":* Generates a professional markdown cover letter.
   - *"Generate Interview Prep":* Generates role-specific behavioral and technical interview questions based on the posting.
 - **Role Isolation & Persona Rules:**
-  - **Owner Sessions:** Prompt includes the user's authentic resume text, skills, and personal notes. Powered by `GEMINI_API_KEY_FREE` (with automatic failover to `GEMINI_API_KEY_PRO` on rate limit 429).
-  - **Guest Sessions:** Prompt uses a generic synthetic candidate persona (e.g. "Senior Software Engineer"). Powered exclusively by `GUEST_GEMINI_API_KEY` (isolating owner quota). All personal contact info, actual user notes, and real application history are completely omitted.
+  - **Owner Sessions:** Prompt includes the user's authentic resume text, skills, and personal notes from repository-backed records. Production uses `PROD_GEMINI_API_KEY_FREE` with failover to `PROD_GEMINI_API_KEY_PRO`; development uses `GEMINI_API_KEY`.
+  - **Guest Sessions:** Prompt uses a generic synthetic candidate persona (e.g. "Senior Software Engineer"). Powered by `PROD_GUEST_GEMINI_API_KEY_FREE` (with `GUEST_GEMINI_API_KEY` compatibility alias), isolating owner quota. All personal contact info, actual user notes, and real application history are omitted. Guest turns use bounded browser-memory history and are not persisted server-side.
+  - Guest quota exhaustion never triggers owner-tier failover. The MVP applies no application-level guest usage cap; the provider's guest-key quota is the limit.
 - **Persistent Multi-Turn Chat:**
   - Free-form chat input allowing user follow-up questions.
   - Conversations saved to database for owner; ephemeral in-memory session for guest visitors.

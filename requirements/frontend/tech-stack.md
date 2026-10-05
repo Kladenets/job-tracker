@@ -28,7 +28,8 @@ Provide a unified, high-performance, single-page web interface (SPA) for the Job
 ### Local-to-Local Development:
 - The Vite dev server proxies `/api/*` requests directly to `http://localhost:3000`.
 - In `NODE_ENV=development`, the backend automatically authenticates incoming requests as the local developer without requiring edge headers.
-- If PostgreSQL is not running locally, the backend seamlessly falls back to the persistent file store (`data/job_tracker_store.json`), allowing full offline development.
+- If PostgreSQL is not running locally, the backend uses the file-backed repository (`data/job_tracker_store.json`), allowing API/UI development without a database service. Candidate, resume, and search profiles use the same repository interface; ignored local JSON seeds may initialize missing profile records but are not written back or shipped in production images.
+- API tests force a fresh temporary file-backed repository and must not require PostgreSQL or modify developer data. PostgreSQL integration tests are a separate opt-in suite using a disposable database.
 
 ### Local-to-Remote / Staging Testing:
 - When running the local UI against a remote server (e.g., the Oracle VM staging or production instance behind Cloudflare Access):
@@ -64,15 +65,12 @@ Full navigation bar visible:
 ### 5.2 Public Guest Session (`role = 'guest'`)
 Recruiter/portfolio navigation bar:
 1. **Explore Jobs (`/inbox`):** Filter, search, and sort public curated postings. Mutation buttons (Save/Dismiss) are disabled or replaced with informational demo badges.
-2. **Job Detail & AI Assistant (`/jobs/:id`):** Clean job view and interactive AI assistant powered by `GUEST_GEMINI_API_KEY` with a generic candidate persona and zero personal data leakage.
+2. **Job Detail & AI Assistant (`/jobs/:id`):** Clean job view and interactive AI assistant powered by `PROD_GUEST_GEMINI_API_KEY_FREE` (or legacy `GUEST_GEMINI_API_KEY`) with a generic candidate persona and zero personal data leakage.
 3. **Applications (`/applications`):** Replaced with a clean, locked portfolio showcase message explaining the private candidate pipeline.
 4. **Dashboard (`/dashboard`):** Hidden from navigation.
 5. **Setup (`/setup`):** Hidden from navigation.
 
 ## 6. Frontend AI Session State & Token Probing
 
-- **Session Rate Limit Detection:**
-  - Upon starting an interactive AI session, the UI requests `/api/agent/provider-status`.
-  - The status response (`{ provider: 'free' | 'pro_backup', quotaExceeded: boolean }`) is cached in client `sessionStorage`.
-  - Displays a clean status badge in the AI drawer (e.g. `✨ Gemini 3.5 Flash (Free Tier)` or `⚡ Gemini 3.5 Flash (Pro Backup)`).
-  - If a 429 response is encountered during chat, TanStack Query catches the status code and triggers an automatic session-level switch to the Pro backup endpoint.
+- Provider telemetry is returned by `GET /api/health` and in AI conversation turn responses. The owner UI may show owner tier/failover details; the guest UI maps status to consumer-facing labels and must not expose owner-tier terminology.
+- Owner-tier 429 handling may switch from the production free key to the configured owner Pro backup. Guest 429s remain isolated to the guest key and never trigger owner failover.

@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-The agent helps the user understand postings and draft application materials. In the MVP it may read approved local data and create drafts. It may not navigate external forms, upload files, submit applications, send messages, schedule interviews, or claim user approval.
+The agent helps the user understand postings and draft application materials. In the MVP it may read approved data from the selected repository and create drafts. PostgreSQL is canonical when configured; file-backed mode supports local development and tests. It may not navigate external forms, upload files, submit applications, send messages, schedule interviews, or claim user approval.
 
 ## Compatibility with the learning project
 
@@ -15,6 +15,8 @@ The implementation should build on the concepts already explored in `../first-ag
 - authorization enforced by the application, not only by model instructions.
 
 The batch job analyzer and interactive application assistant must remain separate capabilities even if they share AI-provider infrastructure.
+
+Public guest chat is a separate, stateless capability. It receives only public job context and bounded user/assistant history, uses a dedicated guest provider key, and never loads candidate profiles/resumes or owner conversation history. The browser holds guest turns in memory only until page reload.
 
 ## Approved context
 

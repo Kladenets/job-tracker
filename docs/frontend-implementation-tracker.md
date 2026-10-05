@@ -10,8 +10,8 @@
 | **4** | **Recommendation Inbox (`/inbox`) & Job Cards** | ✅ **COMPLETE** | Sticky filter bar, 2-tier card, SVG arc ring, zero-pill typography, `@container`, keyboard triage (`j`/`k`/`s`/`x`) |
 | **5** | **Application Tracking Board (`/applications`)** | ✅ **COMPLETE** | Dual Kanban + Table view, spring card physics, interview notes drawer, stage history timeline, add application modal |
 | **6** | **Metrics & Funnel Dashboard (`/dashboard`)** | ✅ **COMPLETE** | Date range presets, custom range picker, monospace metrics, conversion rates, small-sample indicators (`N < 10`), source breakdown |
-| **7** | **Setup, Profiles & Discovery Runs (`/setup`)** | ✅ **COMPLETE** | Candidate profile editor, search rules, crawler health, single URL ingestion, discovery execution, system diagnostics |
-| **8** | **Role Security, Polish & E2E Verification** | ⏳ **NEXT UP** | Owner vs Guest mode boundary enforcement, WCAG AA/AAA audit, responsive check, `npm run build` |
+| **7** | **Setup, Profiles & Discovery Runs (`/setup`)** | ✅ **COMPLETE** | Candidate profile editor, search rules, crawler health, manual URL ingestion, sync button feedback |
+| **8** | **Role Security, Polish & E2E Verification** | 🚧 **IN PROGRESS** | JWT-verified owner/guest API boundary, repository-backed profiles, isolated API tests, full test suite, lint, and production build verified; WCAG AA/AAA audit and responsive check remain |
 
 ---
 
@@ -160,5 +160,18 @@
   - Protected `GET/PUT /api/candidate-profile`, `GET/PUT /api/search-profile`, `POST /api/jobs/ingest-url`, and `POST /api/discovery/run` with `403 Forbidden` for guest sessions.
   - Built polite candidate privacy security card in `/setup` redirecting guest users to `/inbox`.
 - [x] Created unit tests in `src/client/pages/__tests__/setup-page.test.ts` verifying candidate schema validation, search rule exclusions, URL adapter pattern parsing, discovery telemetry aggregation, guest perimeter security, and dirty state tracking (100% passing).
+
+---
+
+## In Progress: Chunk 8 Deliverables
+- [x] Fail-closed production auth with explicit guest-route allowlist and owner-only defaults.
+- [x] Cloudflare owner identity requires a valid signed JWT, matching issuer/audience, forwarded email, and configured `ALLOWED_USER_EMAIL`.
+- [x] Public job list/detail responses use a sanitized DTO that excludes owner workflow and analysis data.
+- [x] Guest role is initialized from `/api/session`; guest AI reuses a bounded in-memory thread and a non-persistent, tool-free server endpoint.
+- [x] PostgreSQL `user_profiles` is canonical for candidate profiles, structured resumes, and search criteria; file-repository mode seeds and persists through its local store.
+- [x] Local profile JSON seed files are ignored/untracked and excluded from production Docker images.
+- [x] API integration tests force a disposable file repository and do not require PostgreSQL.
+- [x] Full default test suite, `npm run lint`, and `npm run build` pass.
+- [ ] Complete role-aware route/UI audit, WCAG review, and responsive verification.
 
 

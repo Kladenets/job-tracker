@@ -51,7 +51,8 @@ The Job Tracker web client provides a high-density, keyboard-first, auditable co
 - **Two-Level Viewport Navigation:**
   - `View 1: Directory`: Displays conversation cards, auto-generated names, last message snippet, job context pills with full-title tooltips, and deletion controls.
   - `View 2: Chat Thread`: Accessible by clicking any conversation card or triggering a new session; includes back navigation arrow, message feed, active job context, and message input.
-- **Persistent Viewport Memory:** Closing the dock preserves both `dockView` and `activeConversationId`. Reopening returns the user to the exact view where they left off.
+- **Owner Persistent Viewport Memory:** Closing the dock preserves `dockView` and `activeConversationId`; owner conversations rehydrate from the repository across page reloads.
+- **Guest Demo Memory:** Closing/reopening the dock preserves the guest thread in browser memory for the current page. Reloading clears it; guest chat never reads or persists owner conversation state.
 - **Split Top-Bar Trigger (`AITopBarButton`):**
   - Left button: Toggles dock open/closed preserving view memory, displays semantic status badge (🟢 / 🟠).
   - Right button: Quick-new spawn (`+`), opens dock directly into a clean chat thread (`View 2`).
@@ -76,4 +77,4 @@ For each development chunk containing client UI:
 1. **Desktop Viewport (`1440px`):** Headers line up with pixel-perfect `h-13` matching borders; no horizontal scrollbar on root.
 2. **Laptop Viewport (`1024px`):** Rail collapse transitions smoothly with zero icon jumping.
 3. **Mobile Viewport (`375px`):** Top header visible, search and filter bars wrap cleanly, content scrollable without bottom nav overlap.
-4. **Automated Verification:** `npm test`, `npm run lint`, and `compile_applet` must pass with 100% success.
+4. **Automated Verification:** `npm test`, `npm run lint`, and `npm run build` must pass. The default API suite uses a disposable file repository without PostgreSQL; optional PostgreSQL integration tests use an isolated disposable database.

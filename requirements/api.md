@@ -5,6 +5,9 @@ Defines the required backend API contracts supporting the five core frontend vie
 
 ## 2. Endpoints by Domain
 
+### 2.0 Session Role
+- `GET /api/session`: Returns the current request role (`owner` or `guest`) for role-aware client navigation. It must not return the authenticated owner's email or other identity details.
+
 ### 2.1 Applications Management (`/api/applications`)
 Supports Page 3 (Application Tracking / Kanban):
 - `GET /api/applications`: List all applications with optional status filter (`?status=...`). Includes joined job posting metadata (title, company, location, salary).
@@ -26,14 +29,19 @@ Supports Page 4 (Metrics & Funnel Dashboard):
 ### 2.3 Candidate Profile & Structured Resume (`/api/candidate-profile`)
 Supports Page 5 (Setup & Profiles):
 - `GET /api/candidate-profile`: Retrieve user profile JSON (`fullName`, `email`, `targetTitle`, `skills`, `yearsExperience`, `resumeSource`, `resumeData`, `additionalExperience`, `notes`).
-- `PUT /api/candidate-profile`: Validate and persist updated user profile to `config/candidate_profile.json`.
+- `PUT /api/candidate-profile`: Validate and persist the updated candidate profile to the selected repository (`user_profiles` JSONB in PostgreSQL; ignored local file store for development/tests).
 - `POST /api/candidate-profile/sync-resume`: Fetch remote resume URL (e.g. GitHub Gist or personal website), validate JSON schema or trigger AI extraction, and auto-populate candidate profile fields (`skills`, `yearsExperience`).
 - `POST /api/candidate-profile/upload-resume`: Upload local resume file (`.json`, `.md`, `.txt`, `.pdf`), parse structured JSON or run AI extraction, and update candidate profile data.
 
-### 2.4 Search Criteria & Configuration (`/api/profile`)
+Both resume ingestion endpoints persist the normalized resume and derived profile through the selected repository. PostgreSQL `user_profiles` is canonical in PostgreSQL mode; the file-backed repository provides database-independent local/API testing.
+
+### 2.4 Search Criteria & Configuration (`/api/search-profile`)
 Supports Page 5 (Setup & Profiles):
-- `GET /api/profile`: Retrieve active search profile criteria.
-- `PUT /api/profile`: Update active search profile criteria (target titles, salary minimums, excluded keywords, geofences). (Owner only).
+- `GET /api/search-profile`: Retrieve the active search profile, composing candidate-derived skills and target title from the repository-backed candidate profile.
+- `PUT /api/search-profile`: Validate and persist active search criteria (target titles, salary minimums, excluded keywords, geofences) to the selected repository. (Owner only).
+- `GET /api/profile` remains a legacy compatibility alias for retrieving the active search profile; new clients use `/api/search-profile`.
+
+Remote resume sync and local resume upload persist the normalized structured resume and derived candidate profile to the same selected repository, regardless of source type. Local JSON seed files are not committed and are not production persistence targets.
 
 ## 3. Role-Based Access Control & Sanitization Rules
 
@@ -51,13 +59,18 @@ Supports Page 5 (Setup & Profiles):
 
 ## 4. Multi-Tier AI Assistant Endpoints (`/api/agent/*`)
 
-- **Owner Chat (`POST /api/agent/chat`):**
-  - Requires `role = 'owner'`.
-  - Backed by owner Gemini keys with automatic failover (`GEMINI_API_KEY_FREE` -> `GEMINI_API_KEY_PRO`).
-  - Injects full candidate context (real resume, bio, personal notes) from `config/candidate_profile.json`.
+- **Owner Conversations:**
+  - `POST /api/agent/conversations` creates an owner conversation.
+  - `GET /api/agent/conversations` lists owner conversations; `GET /api/agent/conversations/:id` retrieves one.
+  - `POST /api/agent/conversations/:id/messages` sends a persistent owner turn; `DELETE /api/agent/conversations/:id` deletes it.
+  - These routes require `role = 'owner'`, persist via the selected repository, and use owner Gemini key resolution/failover.
+  - Agent tools load candidate and resume context from repository-backed profile records.
 - **Guest Demo Chat (`POST /api/agent/guest-chat`):**
-  - Open to `role = 'guest'`.
-  - Backed strictly by `GUEST_GEMINI_API_KEY` (isolating owner quota).
-  - Injects generic synthetic candidate persona (no real name, contact info, or personal notes).
-- **AI Health & Provider Status (`GET /api/agent/provider-status`):**
-  - Probes Free tier quota availability and returns current active provider (`free`, `pro_backup`, or `guest_tier`).
+  - Open to `role = 'guest'` as the sole public API POST exception.
+  - Accepts `{ message, jobId?, history? }`; `history` contains at most 12 user/assistant turns, with each message at most 4000 characters.
+  - Uses the isolated guest key (`PROD_GUEST_GEMINI_API_KEY_FREE`, with `GUEST_GEMINI_API_KEY` as a compatibility alias) and a generic candidate persona.
+  - Does not persist server-side and cannot access owner conversations, candidate profile, or resume. Guest thread state is client-memory-only and clears on page reload.
+  - No application-level guest rate/budget cap is required for the MVP; provider quota is the limit.
+- **AI Health & Provider Status:**
+  - `GET /api/health` returns operational health and configured AI provider/tier telemetry without making billable probes.
+  - AI conversation turn responses include the resolved role/tier telemetry. Guest responses expose only guest-tier status and never use owner keys or owner conversation history.

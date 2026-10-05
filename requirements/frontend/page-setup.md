@@ -23,16 +23,17 @@
     - Simple and predictable UI without complex diff calculations.
   - **Additional Experience & Context (Unstructured Field)**:
     - Concise unstructured text field for side projects, upcoming certs, or context not present on the formal resume, directly incorporated by the AI agent for fit scoring, interview prep, and cover letter drafting.
-  - Save button persisting changes via `PUT /api/candidate-profile`.
+  - Save button persisting changes via `PUT /api/candidate-profile` to the selected repository. PostgreSQL `user_profiles` is canonical when PostgreSQL is enabled; file-backed mode stores the record in its ignored local data file.
+  - Remote sync and local upload both persist the normalized structured resume and derived candidate profile through the same repository. Local seed JSON files are optional, ignored by Git, and never runtime write targets.
 
 ### 1.2 Search Profile & Deterministic Rules Editor
-- Visual editor for `config/search-profile.ts`:
+- Visual editor for the active repository-backed search profile (`GET/PUT /api/search-profile`):
   - Target Job Titles & Title Aliases.
   - Target Geographies (e.g. Remote US, Hybrid within 35 miles of Doylestown, PA).
   - Workplace Type Preferences (Remote, Hybrid, Onsite checkboxes).
   - Minimum Annual Salary Expectation.
   - Hard Excluded Keywords (e.g. `clearance required`, `C++`, `staff level`).
-  - Save button validating and persisting updated search criteria.
+  - Save button validating and persisting updated search criteria to the selected repository. PostgreSQL `user_profiles` is canonical in PostgreSQL mode; file-backed mode persists locally for development/tests.
 
 ### 1.3 Source Adapters & Manual Job URL Ingestion
 - **Active Source Health:** Status cards for configured adapters (`Greenhouse`, `Lever`, `JobSpy Scraper`).

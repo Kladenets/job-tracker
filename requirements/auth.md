@@ -9,16 +9,26 @@ Define the authentication, access controls, network perimeter, and container dep
 The system enforces a dual-role access boundary:
 
 1. **Owner Mode (`role = 'owner'`):**
-   - Activated when incoming requests carry a verified `Cf-Access-Authenticated-User-Email` matching `ALLOWED_USER_EMAIL` (or via `Authorization: Bearer <API_SECRET_KEY>`, or automatically in `NODE_ENV=development`).
+  - In production, activated only when `Cf-Access-Jwt-Assertion` has a valid signature from the configured Cloudflare Access team's rotating JWKS, issuer and audience match `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`, and its email claim matches both `Cf-Access-Authenticated-User-Email` and `ALLOWED_USER_EMAIL`.
+  - `Authorization: Bearer <API_SECRET_KEY>` remains an owner credential for trusted automation. Non-production development/test modes use the local owner identity.
    - Grants full read/write privileges: triaging inbox jobs (save/dismiss), managing application pipeline stages in the Kanban, viewing private metrics, editing candidate/search profiles, and running scrapers.
    - Powered by the primary owner Gemini keys (with automatic Tier 1 Free to Tier 2 Pro failover).
 
 2. **Public Guest Portfolio Mode (`role = 'guest'`):**
    - Activated when visitors access public routes without Cloudflare Access edge authentication.
-   - Strictly **read-only**: Guests can browse, search, and filter job postings (`/api/jobs`), view sanitized job details (`/api/jobs/:id`), and test the conversational AI assistant.
-   - All mutations (`POST`, `PUT`, `PATCH`, `DELETE`) from guests are rejected with `403 Forbidden`.
+  - Guests can browse/search/filter public job postings, view sanitized job details, and send stateless turns to the public AI demo.
+  - Guest requests cannot mutate or retrieve owner application data. `POST /api/agent/guest-chat` is the sole public POST exception; it does not persist conversation or candidate data.
    - Personal candidate information (real resume, personal interview notes, active application stages, private conversion rates) is completely redacted or restricted.
    - Guest AI queries are strictly powered by an isolated `PROD_GUEST_GEMINI_API_KEY_FREE` to guarantee public usage cannot exhaust the owner's primary API quota.
+
+### Production API Route Policy
+
+- Production requests without valid owner credentials are treated as guest traffic only on explicitly public routes. The guest allowlist is `GET /api/session`, `GET /api/jobs`, `GET /api/jobs/:id`, and `POST /api/agent/guest-chat`; static client assets and the SPA entry point are also publicly readable.
+- Every other API route is owner-only and must be denied centrally by the authentication middleware. Guest attempts to read private data or perform mutations return `403 Forbidden`.
+- Guest job responses use an allowlisted public DTO and must omit user workflow status, fit classification/confidence, AI analysis, manual overrides, filter audit data, and raw crawler payloads.
+- Guest chat is stateless on the server and receives only public job context plus at most 12 user/assistant turns (each message at most 4000 characters). The browser retains this guest thread in memory until reload; it must not read or write owner conversations or candidate-profile data.
+- No application-level guest request/token budget is required for the MVP. Guest chat must use only the isolated guest Gemini key, so provider quota use cannot consume owner quota.
+- Cloudflare owner access requires a valid `Cf-Access-Jwt-Assertion` whose signature is checked against the team's rotating JWKS, whose issuer and audience match `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`, and whose email matches both the forwarded identity header and `ALLOWED_USER_EMAIL`. Missing configuration or invalid tokens fail closed.
 
 ## Generative AI API Token Strategy & Failover Architecture
 
@@ -32,6 +42,7 @@ To optimize operating costs, protect against quota exhaustion, and isolate publi
 - **`PROD_GUEST_GEMINI_API_KEY_FREE` (Production Public Guest Portfolio Tier):**
   - Dedicated key for unauthenticated public visitors trying the AI assistant on job detail pages.
   - Quota exhaustion on this key affects only public visitors and never halts owner analysis or background jobs.
+  - The application does not enforce a separate guest request/token budget in the MVP; usage is bounded only by provider quota.
   - Guest prompts run with a generic synthetic candidate persona (e.g. *"Senior Software Engineer"*), completely isolating the owner's real resume and contact information.
 - **`PROD_GEMINI_API_KEY_FREE` (Production Owner Primary - Free Tier):**
   - The default key used for owner operations in production at zero operating cost.
