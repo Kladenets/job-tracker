@@ -262,6 +262,7 @@ async function runApiTests() {
     });
     assert.strictEqual(createPostAppRes.statusCode, 201, "Create application returns 201");
     const createdApp = createPostAppRes.body.application;
+    assert.match(createdApp.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, "Application ID must be a UUID for PostgreSQL");
     assert.strictEqual(createdApp.job_posting_id, createdJob.id, "Application links to correct job");
     assert.strictEqual(createdApp.status, "applied", "Application stage is applied");
     console.log(`✓ POST /api/applications created application ${createdApp.id}`);

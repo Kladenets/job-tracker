@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
@@ -773,7 +774,7 @@ app.post("/api/applications", async (req: Request, res: Response) => {
     const now = new Date().toISOString();
     const initialStatus = status || "preparing";
     const appData = {
-      id: `app-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: randomUUID(),
       job_posting_id,
       status: initialStatus,
       application_url: application_url || job.application_url || job.canonical_url || null,
