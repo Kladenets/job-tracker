@@ -27,7 +27,11 @@ import {
   deriveProfileFromResume,
 } from "./utils/resume-sync";
 import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch";
-import { UnifiedJobPosting } from "./types/job-posting";
+import {
+  ApplicationStatusSchema,
+  JobWorkflowStatusSchema,
+  UnifiedJobPosting,
+} from "./types/job-posting";
 
 dotenv.config();
 
@@ -228,12 +232,17 @@ app.get("/api/jobs/:id", async (req: Request, res: Response) => {
 app.patch("/api/jobs/:id/status", async (req: Request, res: Response) => {
   try {
     const { repository } = getRepository();
-    const { status, reason } = req.body;
-    if (!status) {
+    const status = req.body?.status;
+    const { reason } = req.body ?? {};
+    if (status === undefined || status === null || status === "") {
       return res.status(400).json({ success: false, error: "Missing 'status' in request body" });
     }
+    const parsedStatus = JobWorkflowStatusSchema.safeParse(status);
+    if (!parsedStatus.success) {
+      return res.status(400).json({ success: false, error: "Invalid job workflow status" });
+    }
 
-    await repository.updateStatus(req.params.id, status, "user", reason);
+    await repository.updateStatus(req.params.id, parsedStatus.data, "user", reason);
     const updated = await repository.getById(req.params.id);
     return res.json({ success: true, job: updated });
   } catch (error: unknown) {
@@ -749,6 +758,10 @@ app.post("/api/applications", async (req: Request, res: Response) => {
     if (!job_posting_id) {
       return res.status(400).json({ success: false, error: "Missing 'job_posting_id'" });
     }
+    const parsedStatus = ApplicationStatusSchema.safeParse(status === undefined ? "preparing" : status);
+    if (!parsedStatus.success) {
+      return res.status(400).json({ success: false, error: "Invalid application status" });
+    }
 
     const job = await repository.getById(job_posting_id);
     if (!job) {
@@ -756,7 +769,7 @@ app.post("/api/applications", async (req: Request, res: Response) => {
     }
 
     const now = new Date().toISOString();
-    const initialStatus = status || "preparing";
+    const initialStatus = parsedStatus.data;
     const appData = {
       id: randomUUID(),
       job_posting_id,
@@ -791,20 +804,25 @@ app.patch("/api/applications/:id", async (req: Request, res: Response) => {
     }
 
     const { status, next_action_date, user_notes, application_url } = req.body;
+    const parsedStatus = status === undefined ? undefined : ApplicationStatusSchema.safeParse(status);
+    if (parsedStatus && !parsedStatus.success) {
+      return res.status(400).json({ success: false, error: "Invalid application status" });
+    }
     const now = new Date().toISOString();
     const stageHistory = [...(existing.stage_history || [])];
+    const nextStatus = parsedStatus?.success ? parsedStatus.data : existing.status;
 
-    if (status && status !== existing.status) {
+    if (parsedStatus?.success && parsedStatus.data !== existing.status) {
       stageHistory.push({
-        stage: status,
+        stage: parsedStatus.data,
         entered_at: now,
-        notes: user_notes || `Status advanced to ${status}`,
+        notes: user_notes || `Status advanced to ${parsedStatus.data}`,
       });
     }
 
     const updated = await repository.saveApplication({
       ...existing,
-      status: status || existing.status,
+      status: nextStatus,
       next_action_date: next_action_date !== undefined ? next_action_date : existing.next_action_date,
       user_notes: user_notes !== undefined ? user_notes : existing.user_notes,
       application_url: application_url !== undefined ? application_url : existing.application_url,

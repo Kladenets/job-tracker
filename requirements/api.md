@@ -12,8 +12,8 @@ Defines the required backend API contracts supporting the five core frontend vie
 Supports Page 3 (Application Tracking / Kanban):
 - `GET /api/applications`: List all applications with optional status filter (`?status=...`). Includes joined job posting metadata (title, company, location, salary).
 - `GET /api/applications/:id`: Retrieve single application with full stage history timeline.
-- `POST /api/applications`: Create a new application for an existing job posting (`job_posting_id`, `status`, `applied_at`, `next_action_date`, `user_notes`).
-- `PATCH /api/applications/:id`: Update application status, next action date, or notes. Automatically appends a new stage record to `stage_history`.
+- `POST /api/applications`: Create a new application for an existing job posting (`job_posting_id`, optional `status`, `applied_at`, `next_action_date`, `user_notes`). Status must be an `ApplicationStatusSchema` value; omitted status defaults to `preparing`. Invalid status returns 400 without creating an application.
+- `PATCH /api/applications/:id`: Update application status, next action date, or notes. A supplied status must be an `ApplicationStatusSchema` value; invalid status returns 400 without changing the application or appending to `stage_history`.
 - `DELETE /api/applications/:id`: Delete an application.
 
 ### 2.2 Metrics & Reporting (`/api/dashboard/metrics`)
@@ -51,7 +51,7 @@ Remote resume sync and local resume upload persist the normalized structured res
 | :--- | :---: | :---: |
 | `GET /api/jobs` | Full access with user triage tags | Sanitized list (redacts user status, shows only market postings) |
 | `GET /api/jobs/:id` | Full details, overrides, personal notes | Sanitized details (redacts overrides and personal status) |
-| `PATCH /api/jobs/:id/status` | Permitted (saves/dismisses jobs) | **403 Forbidden** |
+| `PATCH /api/jobs/:id/status` | Permitted for `JobWorkflowStatusSchema` values; invalid status returns 400 without mutation | **403 Forbidden** |
 | `GET /api/applications` | Full candidate application pipeline | **403 Forbidden** (Restricted page in UI) |
 | `POST/PATCH/DELETE /api/applications` | Permitted | **403 Forbidden** |
 | `GET /api/dashboard/metrics` | Full discovery + private conversion rates | **403 Forbidden** (Restricted page in UI) |

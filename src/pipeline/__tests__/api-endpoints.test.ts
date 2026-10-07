@@ -350,6 +350,25 @@ async function runApiTests() {
 
     // 4. Test PATCH /api/jobs/:id/status
     console.log("[Test 4] Testing PATCH /api/jobs/:id/status...");
+    const jobBeforeInvalidStatusRes = await makeRequest(testServer, {
+      method: "GET",
+      path: `/api/jobs/${createdJob.id}`,
+    });
+    const invalidJobStatusRes = await makeRequest(testServer, {
+      method: "PATCH",
+      path: `/api/jobs/${createdJob.id}/status`,
+      body: { status: "hired" },
+    });
+    assert.strictEqual(invalidJobStatusRes.statusCode, 400, "Invalid job workflow statuses must be rejected");
+    const jobAfterInvalidStatusRes = await makeRequest(testServer, {
+      method: "GET",
+      path: `/api/jobs/${createdJob.id}`,
+    });
+    assert.strictEqual(
+      jobAfterInvalidStatusRes.body.job.job_status,
+      jobBeforeInvalidStatusRes.body.job.job_status,
+      "Rejected job status updates must not mutate the posting"
+    );
     const statusPatchRes = await makeRequest(testServer, {
       method: "PATCH",
       path: `/api/jobs/${createdJob.id}/status`,
@@ -364,6 +383,24 @@ async function runApiTests() {
 
     // 5. Test POST /api/applications
     console.log("[Test 5] Testing POST /api/applications...");
+    const invalidAppCreateRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/applications",
+      body: {
+        job_posting_id: createdJob.id,
+        status: "hired",
+      },
+    });
+    assert.strictEqual(invalidAppCreateRes.statusCode, 400, "Invalid application statuses must be rejected on create");
+    const appsAfterInvalidCreateRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/applications",
+    });
+    assert.strictEqual(
+      appsAfterInvalidCreateRes.body.applications.some((application: any) => application.job_posting_id === createdJob.id),
+      false,
+      "Rejected application creates must not persist records"
+    );
     const createPostAppRes = await makeRequest(testServer, {
       method: "POST",
       path: "/api/applications",
@@ -394,6 +431,18 @@ async function runApiTests() {
 
     // 7. Test PATCH /api/applications/:id
     console.log("[Test 7] Testing PATCH /api/applications/:id...");
+    const invalidAppPatchRes = await makeRequest(testServer, {
+      method: "PATCH",
+      path: `/api/applications/${createdApp.id}`,
+      body: { status: "hired" },
+    });
+    assert.strictEqual(invalidAppPatchRes.statusCode, 400, "Invalid application statuses must be rejected on update");
+    const appAfterInvalidPatchRes = await makeRequest(testServer, {
+      method: "GET",
+      path: `/api/applications/${createdApp.id}`,
+    });
+    assert.strictEqual(appAfterInvalidPatchRes.body.application.status, "applied");
+    assert.strictEqual(appAfterInvalidPatchRes.body.application.stage_history.length, 1);
     const patchAppRes = await makeRequest(testServer, {
       method: "PATCH",
       path: `/api/applications/${createdApp.id}`,
