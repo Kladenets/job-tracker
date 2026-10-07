@@ -165,12 +165,13 @@ app.post("/api/db/migrate", async (_req: Request, res: Response) => {
 app.get("/api/jobs", async (req: Request, res: Response) => {
   try {
     const { repository } = getRepository();
-    const jobStatus = typeof req.query.status === "string" ? req.query.status : undefined;
+    const isGuest = req.user?.role === "guest";
+    const jobStatus = !isGuest && typeof req.query.status === "string" ? req.query.status : undefined;
     const availability = typeof req.query.availability === "string" ? req.query.availability : undefined;
     const company = typeof req.query.company === "string" ? req.query.company : undefined;
     const missingSalary = req.query.missingSalary === "true";
     const missingLocation = req.query.missingLocation === "true";
-    const sortBy = req.query.sortBy === "jev_confidence" ? "jev_confidence" : "created_at";
+    const sortBy = !isGuest && req.query.sortBy === "jev_confidence" ? "jev_confidence" : "created_at";
     const sortOrder = req.query.sortOrder === "asc" ? "asc" : "desc";
     const limit = parseInt(typeof req.query.limit === "string" ? req.query.limit : "50", 10);
     const offset = parseInt(typeof req.query.offset === "string" ? req.query.offset : "0", 10);
@@ -187,7 +188,7 @@ app.get("/api/jobs", async (req: Request, res: Response) => {
       offset,
     });
 
-    const visiblePostings = req.user?.role === "guest"
+    const visiblePostings = isGuest
       ? postings.map(sanitizeGuestJob)
       : postings;
 

@@ -57,6 +57,8 @@ Remote resume sync and local resume upload persist the normalized structured res
 | `PUT /api/candidate-profile` | Permitted | **403 Forbidden** |
 | `POST /api/sources/*/scrape` | Permitted | **403 Forbidden** |
 
+For guest `GET /api/jobs`, public market filters (company, availability, missing salary/location) may be applied. Owner workflow status filters and JEV confidence sorting must be ignored so response membership, count, and order do not reveal private review state or fit scores.
+
 ## 4. Multi-Tier AI Assistant Endpoints (`/api/agent/*`)
 
 - **Owner Conversations:**

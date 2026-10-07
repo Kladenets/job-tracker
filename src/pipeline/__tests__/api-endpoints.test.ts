@@ -159,10 +159,10 @@ async function runApiTests() {
       method: "POST",
       path: "/api/jobs/manual",
       body: {
-        title: "Staff Platform Engineer",
+        title: "Senior Software Engineer",
         company: "Venture Corp",
         location: "Remote",
-        description: "Looking for an expert distributed systems engineer.",
+        description: "Looking for an expert distributed systems engineer using Node.js and PostgreSQL.",
         min_amount: 175000,
         max_amount: 200000,
         job_url_direct: "https://venturecorp.example.com/jobs/staff-eng",
@@ -213,7 +213,7 @@ async function runApiTests() {
     assert.strictEqual(listAppsRes.statusCode, 200, "List applications returns 200");
     const foundApp = listAppsRes.body.applications.find((a: any) => a.id === createdApp.id);
     assert.ok(foundApp, "Created application is present in list");
-    assert.strictEqual(foundApp.job.title, "Staff Platform Engineer", "Joined job title verified");
+    assert.strictEqual(foundApp.job.title, "Senior Software Engineer", "Joined job title verified");
     console.log("✓ GET /api/applications verified with enriched job relation");
 
     // 7. Test PATCH /api/applications/:id
@@ -252,6 +252,18 @@ async function runApiTests() {
     assert.strictEqual(deleteAppRes.statusCode, 200, "Delete application returns 200");
     console.log("✓ DELETE /api/applications/:id deleted application cleanly");
 
+    const discoveredJobRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/jobs/manual",
+      body: {
+        title: "Software Engineer",
+        company: "Public Example Co",
+        description: "A second public listing for guest filter verification.",
+        job_url_direct: "https://public-example.example/jobs/software-engineer",
+      },
+    });
+    assert.strictEqual(discoveredJobRes.statusCode, 200);
+
     // 10. Production guest boundary and public job sanitization
     console.log("[Test 10] Testing production guest access boundaries...");
     process.env.NODE_ENV = "production";
@@ -270,6 +282,25 @@ async function runApiTests() {
       delete process.env[keyName];
     }
 
+    process.env.API_SECRET_KEY = "api-test-guest-filter-owner";
+    const ownerJobsRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/jobs?limit=50&sortBy=created_at",
+      headers: { authorization: "Bearer api-test-guest-filter-owner" },
+    });
+    assert.strictEqual(ownerJobsRes.statusCode, 200);
+    const ownerPostings = ownerJobsRes.body.postings;
+    const savedOwnerJob = ownerPostings.find((posting: any) => posting.id === createdJob.id);
+    const discoveredOwnerJob = ownerPostings.find((posting: any) => posting.id === discoveredJobRes.body.result.items[0].id);
+    assert.strictEqual(savedOwnerJob.job_status, "saved");
+    assert.strictEqual(discoveredOwnerJob.job_status, "discovered");
+    assert.ok(
+      savedOwnerJob.jev_confidence > discoveredOwnerJob.jev_confidence,
+      "Fixture must have opposite confidence and creation ordering for a discriminating sort check"
+    );
+    assert.strictEqual(ownerPostings[0].id, discoveredOwnerJob.id, "Newest public listing starts first by creation date");
+    delete process.env.API_SECRET_KEY;
+
     const sessionRes = await makeRequest(testServer, {
       method: "GET",
       path: "/api/session",
@@ -284,6 +315,21 @@ async function runApiTests() {
     assert.strictEqual(guestJobsRes.statusCode, 200);
     const guestJob = guestJobsRes.body.postings.find((posting: any) => posting.id === createdJob.id);
     assert.ok(guestJob, "Guest can browse public job postings");
+    const guestStatusFilteredRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/jobs?limit=50&status=saved&sortBy=jev_confidence",
+    });
+    assert.strictEqual(guestStatusFilteredRes.statusCode, 200);
+    assert.strictEqual(
+      guestStatusFilteredRes.body.count,
+      guestJobsRes.body.count,
+      "Guest owner-state/fit query parameters must not change visible counts"
+    );
+    assert.deepStrictEqual(
+      guestStatusFilteredRes.body.postings.map((posting: any) => posting.id),
+      guestJobsRes.body.postings.map((posting: any) => posting.id),
+      "Guest owner-state/fit query parameters must not change visible job membership or order"
+    );
     for (const privateField of ["job_status", "jev_fit", "jev_confidence", "ai_analysis", "user_overrides", "crawler_data"]) {
       assert.ok(!(privateField in guestJob), `Guest job DTO must omit ${privateField}`);
     }
