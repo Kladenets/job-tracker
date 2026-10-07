@@ -26,6 +26,7 @@ import {
   parseJsonResume,
   deriveProfileFromResume,
 } from "./utils/resume-sync";
+import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch";
 import { UnifiedJobPosting } from "./types/job-posting";
 
 dotenv.config();
@@ -315,34 +316,28 @@ app.post("/api/candidate-profile/sync-resume", async (req: Request, res: Respons
       });
     }
 
-    // Auto-normalize GitHub Gist URLs if necessary
-    // e.g. https://gist.github.com/Kladenets/58e9ff9ad9dc8fc33a48961b4e18b4d9 -> https://gist.githubusercontent.com/Kladenets/58e9ff9ad9dc8fc33a48961b4e18b4d9/raw/resume.json
-    const gistMatch = targetUrl.match(/gist\.github\.com\/([^/]+)\/([a-f0-9]+)(?:\/raw)?(?:\/.*)?/i);
+    // Auto-normalize GitHub Gist URLs only when the parsed host is gist.github.com.
+    let gistMatch: RegExpMatchArray | null = null;
+    try {
+      const sourceUrl = new URL(targetUrl);
+      if (sourceUrl.protocol === "https:" && sourceUrl.hostname === "gist.github.com") {
+        gistMatch = sourceUrl.pathname.match(/^\/([^/]+)\/([a-f0-9]+)(?:\/raw)?(?:\/.*)?$/i);
+      }
+    } catch {
+      // The safe fetcher returns a client error for malformed URLs.
+    }
     if (gistMatch) {
       targetUrl = `https://gist.githubusercontent.com/${gistMatch[1]}/${gistMatch[2]}/raw/resume.json`;
     }
 
-    let response = await fetch(targetUrl, {
-      headers: {
-        "User-Agent": "JobTrackerApp/1.0 (ResumeSync)",
-        Accept: "application/json, text/plain, */*",
-      },
-      redirect: "follow",
-    });
+    let response = await fetchSafeResumeText(targetUrl);
 
     // If 404 on /raw/resume.json for gist, try generic /raw fallback
     if (!response.ok && response.status === 404 && targetUrl.includes("/raw/resume.json")) {
       const fallbackUrl = targetUrl.replace("/raw/resume.json", "/raw");
-      const fallbackRes = await fetch(fallbackUrl, {
-        headers: {
-          "User-Agent": "JobTrackerApp/1.0 (ResumeSync)",
-          Accept: "application/json, text/plain, */*",
-        },
-        redirect: "follow",
-      });
+      const fallbackRes = await fetchSafeResumeText(fallbackUrl);
       if (fallbackRes.ok) {
         response = fallbackRes;
-        targetUrl = fallbackUrl;
       }
     }
 
@@ -352,14 +347,14 @@ app.post("/api/candidate-profile/sync-resume", async (req: Request, res: Respons
 
     let structured;
     try {
-      structured = parseJsonResume(await response.text());
+      structured = parseJsonResume(response.text);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Remote resume is invalid";
       return res.status(422).json({ success: false, error: message });
     }
     const result = deriveProfileFromResume(structured, {
       type: "remote_url",
-      url: targetUrl,
+      url: response.url,
     }, currentProfile);
 
     await repository.saveUserProfile("candidate_profile", result.profile);
@@ -372,6 +367,9 @@ app.post("/api/candidate-profile/sync-resume", async (req: Request, res: Respons
       resumeData: result.resumeData,
     });
   } catch (err: unknown) {
+    if (err instanceof UnsafeResumeUrlError) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
     const message = err instanceof Error ? err.message : "Failed to sync resume";
     return res.status(500).json({ success: false, error: message });
   }

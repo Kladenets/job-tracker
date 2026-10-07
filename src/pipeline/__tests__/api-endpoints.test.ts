@@ -3,6 +3,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { fetchSafeResumeText } from "../../utils/safe-resume-fetch";
 
 console.log("=== Running End-to-End HTTP API Endpoint Tests ===");
 
@@ -65,7 +66,70 @@ function makeRequest(
   });
 }
 
+async function runSafeResumeFetchTests() {
+  await assert.rejects(
+    fetchSafeResumeText("http://127.0.0.1/latest"),
+    /HTTPS/
+  );
+  await assert.rejects(
+    fetchSafeResumeText("https://192.168.1.20/latest"),
+    /public IP addresses/
+  );
+  await assert.rejects(
+    fetchSafeResumeText("https://[4000::1]/latest"),
+    /public IP addresses/
+  );
+  await assert.rejects(
+    fetchSafeResumeText("https://user:secret@resume.example/document.json"),
+    /credentials/
+  );
+  const publicIpv6Response = await fetchSafeResumeText("https://[2606:4700:4700::1111]/resume.json", {
+    request: async () => ({ statusCode: 200, headers: {}, body: "{}" }),
+  });
+  assert.strictEqual(publicIpv6Response.ok, true, "Global IPv6 resume hosts remain supported");
+
+  await assert.rejects(
+    fetchSafeResumeText("https://mixed.example/resume.json", {
+      resolveAddresses: async () => [
+        { address: "8.8.8.8", family: 4 },
+        { address: "127.0.0.1", family: 4 },
+      ],
+      request: async () => {
+        throw new Error("Mixed public/private DNS answers must not be requested");
+      },
+    }),
+    /public IP addresses/
+  );
+
+  const resolvedHosts: string[] = [];
+  let requestCount = 0;
+  await assert.rejects(
+    fetchSafeResumeText("https://public.example/resume.json", {
+      resolveAddresses: async (hostname) => {
+        resolvedHosts.push(hostname);
+        return hostname === "public.example"
+          ? [{ address: "8.8.8.8", family: 4 }]
+          : [{ address: "169.254.169.254", family: 4 }];
+      },
+      request: async () => {
+        requestCount += 1;
+        return {
+          statusCode: 302,
+          statusMessage: "Found",
+          headers: { location: "https://private.example/latest" },
+          body: "",
+        };
+      },
+    }),
+    /public IP addresses/
+  );
+  assert.deepStrictEqual(resolvedHosts, ["public.example", "private.example"]);
+  assert.strictEqual(requestCount, 1, "Unsafe redirects must be rejected before a second request");
+  console.log("✓ Resume URL checks reject unsafe destinations and revalidate redirects");
+}
+
 async function runApiTests() {
+  await runSafeResumeFetchTests();
   const originalEnv = { ...process.env };
   const testDataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "job-tracker-api-"));
 
@@ -164,6 +228,23 @@ async function runApiTests() {
     assert.strictEqual(updateRes.statusCode, 200, "Profile update returns 200");
     assert.strictEqual(updateRes.body.profile.bio, updatedBio, "Updated bio matches");
     console.log("✓ PUT /api/candidate-profile persisted updated profile to repository");
+
+    const unsafeResumeSyncRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/candidate-profile/sync-resume",
+      body: { url: "https://127.0.0.1/private-profile" },
+    });
+    assert.strictEqual(unsafeResumeSyncRes.statusCode, 400, "Private resume URL targets must be rejected");
+    const profileAfterUnsafeSyncRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/candidate-profile",
+    });
+    assert.deepStrictEqual(
+      profileAfterUnsafeSyncRes.body.profile,
+      updateRes.body.profile,
+      "Rejected resume URL sync must not mutate the stored candidate profile"
+    );
+    console.log("✓ Unsafe resume URL sync is rejected without changing stored candidate data");
 
     const pdfUploadRes = await makeRequest(testServer, {
       method: "POST",

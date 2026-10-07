@@ -76,6 +76,7 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 - Restrict outbound HTTP to configured job sources and AI providers where feasible.
 - Sanitize rendered posting HTML; prefer rendering extracted text.
 - Manual URL imports must be restricted to safe HTTP(S) destinations and protected from access to local or private network resources. Importing from a previously unconfigured host requires explicit user confirmation.
+- Remote resume sync accepts HTTPS on standard port 443 only, rejects credentials and local/private/reserved destinations, validates all DNS answers, and pins the connection to a validated public address. Redirects are handled manually, limited to five hops, and revalidated before each request; response bodies and request time are bounded.
 - Redact secrets and sensitive personal fields from logs.
 - Apply least privilege to agent tools and background workers.
 - Keep dependencies locked and support routine vulnerability review.
