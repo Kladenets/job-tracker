@@ -1,5 +1,6 @@
 import { UnifiedJobPosting } from "../types/job-posting";
 import { SearchProfile, loadSearchProfile } from "../config/search-profile";
+import { distance as distanceBetweenZips, lookup as lookupZip, lookupByName } from "zipcodes";
 
 export interface FilterRuleResult {
   rule_id: string;
@@ -11,6 +12,33 @@ export interface FilterRuleResult {
 export interface DeterministicEvaluation {
   passed: boolean;
   matchedRules: FilterRuleResult[];
+}
+
+function zipCodesForLocation(location: string): string[] {
+  const zipMatch = location.match(/\b(\d{5})(?:-\d{4})?\b/);
+  if (zipMatch) {
+    return lookupZip(zipMatch[1]) ? [zipMatch[1]] : [];
+  }
+
+  const parts = location.split(",").map((part) => part.trim());
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const stateMatch = parts[index + 1].match(/^([a-z]{2})(?:\b|\s|$)/i);
+    if (!stateMatch || !parts[index]) continue;
+    const matches = lookupByName(parts[index], stateMatch[1].toUpperCase());
+    if (matches.length > 0) return matches.map((match) => match.zip);
+  }
+
+  return [];
+}
+
+function getCommuteDistanceMiles(location: string, targetZip: string): number | null {
+  const target = lookupZip(targetZip);
+  if (!target) return null;
+
+  const distances = zipCodesForLocation(location)
+    .map((zip) => distanceBetweenZips(target.zip, zip))
+    .filter((distance): distance is number => distance !== null && Number.isFinite(distance));
+  return distances.length > 0 ? Math.min(...distances) : null;
 }
 
 /**
@@ -29,7 +57,6 @@ export function evaluateDeterministicFilter(
   const titleLower = posting.title.toLowerCase();
   const descLower = posting.description_text.toLowerCase();
   const companyLower = posting.company.toLowerCase();
-  const locationLower = (posting.location || "").toLowerCase();
 
   // 1. Excluded Companies / Agencies
   for (const excludedCo of rules.companies.excludedCompanies) {
@@ -87,32 +114,31 @@ export function evaluateDeterministicFilter(
 
   // 4. Workplace & Commute Radius
   // CRITICAL: Unknown workplace (null / "unknown") is NEVER an exclusion!
+  if (
+    posting.workplace_type !== "unknown" &&
+    !rules.workplace.allowedTypes.includes(posting.workplace_type)
+  ) {
+    matchedRules.push({
+      rule_id: "workplace_type_not_allowed",
+      rule_name: "Workplace Type Not Allowed",
+      passed: false,
+      evidence: `Workplace type '${posting.workplace_type}' is not in the allowed types list`,
+    });
+  }
+
   if (posting.workplace_type === "onsite") {
-    // If it's explicitly 100% onsite, check whether location is outside target commute area
     const targetLoc = activeProfile.discovery.targetLocation;
-    const isLocal =
-      locationLower.includes(targetLoc.city.toLowerCase()) ||
-      locationLower.includes(targetLoc.state.toLowerCase()) ||
-      locationLower.includes(targetLoc.zip) ||
-      locationLower.includes("philadelphia") ||
-      locationLower.includes("bucks county") ||
-      locationLower.includes("montgomery county");
+    const distanceMiles = posting.location
+      ? getCommuteDistanceMiles(posting.location, targetLoc.zip)
+      : null;
+    const maxCommuteMiles = targetLoc.radiusMiles + targetLoc.bufferMiles;
 
-    // If clearly in another state or distant metropolitan area
-    const knownDistantLocations = [
-      "san francisco", "seattle", "london", "austin", "chicago", "boston",
-      "los angeles", "denver", "atlanta", "toronto", "berlin", "tokyo",
-      "new york, ny", "manhattan", "brooklyn"
-    ];
-
-    const isDistant = knownDistantLocations.some((loc) => locationLower.includes(loc));
-
-    if (posting.location && !isLocal && isDistant) {
+    if (distanceMiles !== null && distanceMiles > maxCommuteMiles) {
       matchedRules.push({
         rule_id: "onsite_exceeds_commute",
         rule_name: "100% On-site Outside Commute Radius",
         passed: false,
-        evidence: `Job requires 100% on-site presence in '${posting.location}', which exceeds commute radius of ${targetLoc.radiusMiles + targetLoc.bufferMiles} miles from ${targetLoc.city}, ${targetLoc.state}`,
+        evidence: `Job requires 100% on-site presence in '${posting.location}' (${Math.round(distanceMiles)} miles from ${targetLoc.zip}), beyond the configured ${maxCommuteMiles}-mile radius including buffer`,
       });
     }
   }

@@ -40,7 +40,7 @@ Parsing PDF, Markdown, or plain-text resumes with an extraction model is a futur
 ### 2.4 Search Criteria & Configuration (`/api/search-profile`)
 Supports Page 5 (Setup & Profiles):
 - `GET /api/search-profile`: Retrieve the active search profile, composing candidate-derived skills and target title from the repository-backed candidate profile.
-- `PUT /api/search-profile`: Validate and persist active search criteria (target titles, salary minimums, excluded keywords, geofences) to the selected repository. (Owner only).
+- `PUT /api/search-profile`: Validate and persist active search criteria (target titles, salary minimums, excluded keywords, allowed workplace types, target location, commute radius, and buffer) to the selected repository. Radius and buffer must be between 0 and 500 miles. (Owner only).
 - `GET /api/profile` remains a legacy compatibility alias for retrieving the active search profile; new clients use `/api/search-profile`.
 
 Remote resume sync and local resume upload persist the normalized structured resume and derived candidate profile to the same selected repository, regardless of source type. Local JSON seed files are not committed and are not production persistence targets.

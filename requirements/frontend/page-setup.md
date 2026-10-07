@@ -31,8 +31,8 @@
 ### 1.2 Search Profile & Deterministic Rules Editor
 - Visual editor for the active repository-backed search profile (`GET/PUT /api/search-profile`):
   - Target Job Titles & Title Aliases.
-  - Target Geographies (e.g. Remote US, Hybrid within 35 miles of Doylestown, PA).
-  - Workplace Type Preferences (Remote, Hybrid, Onsite checkboxes).
+  - Target Geographies with editable commute radius and buffer (e.g. Hybrid within 35 miles plus buffer of Doylestown, PA).
+  - Workplace Type Preferences (Remote, Hybrid, Onsite checkboxes); unknown workplace/location data remains eligible rather than being inferred as disallowed.
   - Minimum Annual Salary Expectation.
   - Hard Excluded Keywords (e.g. `clearance required`, `C++`, `staff level`).
   - Save button validating and persisting updated search criteria to the selected repository. PostgreSQL `user_profiles` is canonical in PostgreSQL mode; file-backed mode persists locally for development/tests.

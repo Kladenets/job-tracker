@@ -306,7 +306,7 @@ export function SearchProfileEditor({
             Allowed Workplace Types
           </label>
           <div className="space-y-2 text-xs">
-            {["remote", "hybrid", "onsite", "unknown"].map((type) => {
+            {["remote", "hybrid", "onsite"].map((type) => {
               const checked = profile.deterministicFilterRules.workplace.allowedTypes.includes(type);
               return (
                 <label key={type} className="flex items-center gap-2 cursor-pointer select-none">
@@ -420,11 +420,53 @@ export function SearchProfileEditor({
                 className="w-16 h-8 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)]"
               />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
-              <span>Max Commute Radius:</span>
-              <span className="font-semibold text-[var(--text-primary)]">
-                {profile.discovery.targetLocation.radiusMiles} miles
-              </span>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1 text-[11px] text-[var(--text-secondary)]">
+                <span className="block">Radius (miles)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  step={5}
+                  value={profile.discovery.targetLocation.radiusMiles}
+                  onChange={(e) =>
+                    setProfile({
+                      ...profile,
+                      discovery: {
+                        ...profile.discovery,
+                        targetLocation: {
+                          ...profile.discovery.targetLocation,
+                          radiusMiles: Number(e.target.value),
+                        },
+                      },
+                    })
+                  }
+                  className="w-full h-8 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)]"
+                />
+              </label>
+              <label className="space-y-1 text-[11px] text-[var(--text-secondary)]">
+                <span className="block">Buffer (miles)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  step={5}
+                  value={profile.discovery.targetLocation.bufferMiles}
+                  onChange={(e) =>
+                    setProfile({
+                      ...profile,
+                      discovery: {
+                        ...profile.discovery,
+                        targetLocation: {
+                          ...profile.discovery.targetLocation,
+                          bufferMiles: Number(e.target.value),
+                        },
+                      },
+                    })
+                  }
+                  className="w-full h-8 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)]"
+                />
+              </label>
             </div>
           </div>
         </div>

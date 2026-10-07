@@ -138,7 +138,7 @@ The deterministic prefilter acts as an inexpensive, rule-based qualification gat
    - No separate `is_incomplete` flag is required; the UI and queries inspect nullable columns directly (`WHERE salary IS NULL`, etc.).
 4. **Deliberate Tolerance & "Wiggle Room":**
    Real job descriptions are often negotiable or imprecise. The filter provides configurable flexibility:
-   - **Workplace & Commute Boundaries:** Exclude only if the posting explicitly requires 100% on-site presence AND is located outside the configured commute radius (plus buffer, e.g. target + 15 miles). Unstated workplace or location is treated as unknown and preserved.
+   - **Workplace & Commute Boundaries:** Enforce configured allowed types for known remote, hybrid, and onsite values. Preserve unknown workplace types. Exclude an explicitly onsite posting only when a supported US ZIP or city/state centroid places it beyond the configured radius plus buffer; locations without a reliable centroid remain unknown and are preserved. No city-name blacklist may substitute for distance calculation.
    - **Compensation Floor with Tolerance:** Exclude only when compensation is explicitly stated and the upper/provided bound falls completely below the configured floor minus tolerance (e.g., target minimum $120k with 15% tolerance = excludes only below $102k). Roles without listed compensation pass through.
    - **Keyword & Qualification Relevance:** Exclude jobs that match none of the designated title aliases or required core skill keywords (completely different domain), or match explicit negative title keywords.
    - **Excluded Titles & Seniority:** Exclude explicit non-viable titles (e.g., "Intern", "Director", "VP", "Sales Representative", "Unpaid").

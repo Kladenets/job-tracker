@@ -3,6 +3,9 @@ import path from "path";
 import { ingestRawPostings } from "../ingestion-pipeline";
 import { RawJobPosting } from "../../types/job";
 import { FileJobRepository } from "../../db/file-repository";
+import { loadSearchProfile } from "../../config/search-profile";
+import { evaluateDeterministicFilter } from "../deterministic-filter";
+import { translateRawJobPosting } from "../../normalizers/job-translator";
 
 // Helper assertion function
 function assert(condition: boolean, message: string) {
@@ -25,6 +28,63 @@ async function runDeduplicationAndStatePreservationTests() {
 
   // Instantiate isolated test repository
   const repo = new FileJobRepository(testStorePath);
+
+  const restrictedProfile = structuredClone(loadSearchProfile());
+  restrictedProfile.deterministicFilterRules.workplace.allowedTypes = ["onsite"];
+  const remotePosting = translateRawJobPosting({
+    id: "remote-type-filter-test",
+    site: "indeed",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    location: "Remote, US",
+    is_remote: true,
+    description: "Software Engineer role.",
+  });
+  const remoteTypeEvaluation = evaluateDeterministicFilter(remotePosting, restrictedProfile);
+  assert(
+    remoteTypeEvaluation.matchedRules.some((rule) => rule.rule_id === "workplace_type_not_allowed"),
+    "Known workplace types omitted from allowedTypes must be rejected"
+  );
+
+  const unknownWorkplacePosting = translateRawJobPosting({
+    id: "unknown-type-filter-test",
+    site: "indeed",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    description: "Software Engineer role.",
+  });
+  assert(
+    evaluateDeterministicFilter(unknownWorkplacePosting, restrictedProfile).passed,
+    "Unknown workplace data must remain eligible even when unknown is not selected"
+  );
+
+  const nearbyOnsitePosting = translateRawJobPosting({
+    id: "nearby-onsite-test",
+    site: "indeed",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    location: "Philadelphia, PA",
+    is_remote: false,
+    description: "Software Engineer role. 100% onsite.",
+  });
+  assert(
+    evaluateDeterministicFilter(nearbyOnsitePosting, loadSearchProfile()).passed,
+    "Geocodable onsite locations within the configured radius must remain eligible"
+  );
+
+  const unknownDistancePosting = translateRawJobPosting({
+    id: "unknown-distance-test",
+    site: "indeed",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    location: "Office location not disclosed",
+    is_remote: false,
+    description: "Software Engineer role. 100% onsite.",
+  });
+  assert(
+    evaluateDeterministicFilter(unknownDistancePosting, loadSearchProfile()).passed,
+    "Onsite locations without a resolvable postal centroid must remain unknown, not be guessed distant"
+  );
 
   // 1. Ingest brand new job posting (First crawl)
   const initialRawJob: RawJobPosting = {

@@ -20,17 +20,14 @@ export const SearchProfileSchema = z.object({
       city: z.string().default("Doylestown"),
       state: z.string().default("PA"),
       zip: z.string().default("18901"),
-      radiusMiles: z.number().default(35),
-      bufferMiles: z.number().default(15),
+      radiusMiles: z.number().min(0).max(500).default(35),
+      bufferMiles: z.number().min(0).max(500).default(15),
     }),
   }),
   deterministicFilterRules: z.object({
     workplace: z.object({
-      allowedTypes: z.array(z.string()).default(["remote", "hybrid", "onsite", "unknown"]),
+      allowedTypes: z.array(z.enum(["remote", "hybrid", "onsite", "unknown"])).default(["remote", "hybrid", "onsite", "unknown"]),
       maxOnsiteDaysPerWeek: z.number().default(2),
-      commuteRadiusMiles: z.number().default(35),
-      commuteBufferMiles: z.number().default(15),
-      allowMissingWorkplace: z.boolean().default(true),
     }),
     compensation: z.object({
       minSalaryAnnual: z.number().default(120000),
