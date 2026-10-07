@@ -57,7 +57,7 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 - Before listening in production, the server must probe and initialize the configured PostgreSQL repository. Missing or unavailable PostgreSQL must prevent production startup; production must never silently switch candidate/job data to the file repository. Development may fall back to the file repository when PostgreSQL is unconfigured or unavailable, and tests may explicitly force isolated file mode.
 - The database must persist independently of disposable application processes or containers.
 - Web and background processing must support clean startup and shutdown without corrupting active work.
-- Application upgrades must run documented migrations and fail without partially upgrading the database.
+- Repository initialization must apply unapplied version-controlled migrations transactionally before the web server or CLI uses PostgreSQL. A migration ledger and advisory lock must make startup repeatable and safe across concurrent app starts; missing migration files or a migration failure must fail startup before requests are served.
 - The product must clearly report when PostgreSQL, the crawler, or the AI provider is unavailable.
 - The application server must provide an operational health check endpoint (`GET /api/health`) that returns system uptime, process state, storage status, and AI configuration without triggering billable external calls or blocking application threads.
 

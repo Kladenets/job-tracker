@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Copy dependency manifests
 COPY package*.json tsconfig.json ./
+COPY scripts/copy-db-migrations.cjs ./scripts/copy-db-migrations.cjs
 
 # Install all dependencies (including devDependencies required for compilation)
 RUN npm ci

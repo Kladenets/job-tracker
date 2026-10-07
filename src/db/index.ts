@@ -2,6 +2,7 @@ import { JobPostingRepository } from "./repository-interface";
 import { PostgresJobRepository } from "./postgres-repository";
 import { FileJobRepository } from "./file-repository";
 import { checkDatabaseConnection, getDatabasePool } from "./connection";
+import { runMigrations } from "./migrations/migrator";
 
 let activeRepository: JobPostingRepository | null = null;
 let activeEngine: "postgres" | "file" = "file";
@@ -92,6 +93,14 @@ export async function initializeRepository(): Promise<{
       forceFileRepository: process.env.JOB_TRACKER_FORCE_FILE === "true",
       databaseUrl: process.env.DATABASE_URL,
     });
+
+    if (selected.engine === "postgres") {
+      const migrationResult = await runMigrations();
+      if (!migrationResult.success) {
+        throw new Error(`Database migrations failed: ${migrationResult.message}`);
+      }
+    }
+
     activeRepository = selected.repository;
     activeEngine = selected.engine;
     console.log(`[Persistence] Active repository: ${activeEngine === "postgres" ? "PostgreSQL" : "Local File Storage (data/job_tracker_store.json)"}`);
