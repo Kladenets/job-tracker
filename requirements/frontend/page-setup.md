@@ -52,9 +52,9 @@
 
 ### 1.5 System & AI Provider Health Overview
 - Real-time status cards:
-  - Database status: Active engine (`PostgreSQL` vs `File Store`), connection latency.
+  - Database status: Active engine and actual PostgreSQL connectivity (`Connected`, `Unavailable`, or `Unknown`); file mode reports the file store as active rather than claiming PostgreSQL health.
   - AI System 1 (TypeSafe AI / JEV): Status (`Active` or `Simulated Scoring`).
-  - AI System 2 (Google Gemini Interactions): Active tier (`✨ Free Tier` vs `⚡ Pro Backup`), failover status, and guest token health.
+  - AI System 2 (Google Gemini Interactions): Display exact resolved tier (`Development Key`, `Free Tier`, `Pro Tier`, or `Pro Backup` only during failover), configured/offline state, and actual failover status.
 
 ### 1.6 Guest Mode Boundary & Configuration Locking
 - **Access Rule:** Strictly restricted to authenticated owner sessions (`role = 'owner'`).

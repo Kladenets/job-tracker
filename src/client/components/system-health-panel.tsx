@@ -1,6 +1,27 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Database, Cpu, Sparkles, CheckCircle2, ShieldCheck, Activity, RefreshCw } from "lucide-react";
+import {
+  getDatabaseHealthDisplay,
+  getGeminiTierDisplay,
+  HealthTone,
+  PersistenceEngine,
+  GeminiKeyTier,
+} from "./system-health-status";
+
+const badgeClasses: Record<HealthTone, string> = {
+  healthy: "text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] border-[var(--status-recommended-fg)]/20",
+  warning: "text-[var(--status-marginal-fg)] bg-[var(--status-marginal-bg)] border-[var(--status-marginal-fg)]/20",
+  unavailable: "text-[var(--status-danger-fg)] bg-[var(--status-danger-bg)] border-[var(--status-danger-fg)]/20",
+  unknown: "text-[var(--text-muted)] bg-[var(--surface-sunken)] border-[var(--border-subtle)]",
+};
+
+const dotClasses: Record<HealthTone, string> = {
+  healthy: "bg-emerald-500",
+  warning: "bg-amber-500",
+  unavailable: "bg-rose-500",
+  unknown: "bg-slate-400",
+};
 
 interface HealthResponse {
   status: string;
@@ -8,13 +29,13 @@ interface HealthResponse {
   service: string;
   version: string;
   persistence: {
-    engine: "file" | "postgres";
+  engine: PersistenceEngine;
     activeProfile: string;
   };
   aiProviders: {
     geminiInteractions: {
       configured: boolean;
-      tier: "free" | "paid";
+      tier: GeminiKeyTier;
       failoverActive: boolean;
       mode: string;
       model: string;
@@ -27,7 +48,7 @@ interface HealthResponse {
 }
 
 interface DbStatusResponse {
-  activeEngine: string;
+  activeEngine: PersistenceEngine;
   postgres: {
     connected: boolean;
     poolCount?: number;
@@ -61,7 +82,11 @@ export function SystemHealthPanel() {
     refetchDb();
   };
 
-  const isPostgres = health?.persistence.engine === "postgres" || dbStatus?.activeEngine === "postgres";
+  const activeEngine = dbStatus?.activeEngine ?? health?.persistence.engine;
+  const isPostgres = activeEngine === "postgres";
+  const databaseState = getDatabaseHealthDisplay(activeEngine, dbStatus?.postgres.connected);
+  const gemini = health?.aiProviders.geminiInteractions;
+  const geminiState = getGeminiTierDisplay(gemini?.tier, gemini?.failoverActive);
 
   return (
     <div className="space-y-6">
@@ -94,9 +119,9 @@ export function SystemHealthPanel() {
               <Database className="h-4 w-4 text-[var(--border-focus)]" />
               Database Engine
             </span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded border border-[var(--status-recommended-fg)]/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Healthy
+            <span className={`inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium px-1.5 py-0.5 rounded border ${badgeClasses[databaseState.tone]}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${dotClasses[databaseState.tone]}`} />
+              {databaseState.label}
             </span>
           </div>
 
@@ -104,25 +129,25 @@ export function SystemHealthPanel() {
             <div className="flex items-center justify-between">
               <span className="text-[var(--text-muted)]">Active Engine:</span>
               <span className="font-bold text-[var(--text-primary)] uppercase">
-                {health?.persistence.engine || "File Store"}
+                {activeEngine ? activeEngine === "postgres" ? "POSTGRES" : "FILE" : "Unknown"}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[var(--text-muted)]">Storage Target:</span>
               <span className="text-[var(--text-secondary)] truncate max-w-44">
-                {isPostgres ? "Cloud SQL / PG Pool" : "data/job_tracker_store.json"}
+                {isPostgres ? "PostgreSQL connection pool" : activeEngine === "file" ? "data/job_tracker_store.json" : "Unknown"}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[var(--text-muted)]">Transaction State:</span>
-              <span className="text-[var(--status-recommended-fg)]">Synchronous / ACID</span>
+                <span className={databaseState.tone === "healthy" ? "text-[var(--status-recommended-fg)]" : "text-[var(--status-danger-fg)]"}>
+                  {databaseState.tone === "healthy" ? isPostgres ? "Connection verified" : "File store active" : databaseState.label}
+                </span>
             </div>
           </div>
 
           <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed pt-2 border-t border-[var(--border-subtle)]">
-            {isPostgres
-              ? "Relational PostgreSQL database connection pool active with low latency."
-              : "Zero-dependency local atomic file storage active with transactional disk fsync."}
+            {databaseState.description}
           </p>
         </div>
 
@@ -168,9 +193,9 @@ export function SystemHealthPanel() {
               <Sparkles className="h-4 w-4 text-amber-500" />
               AI System 2 (Gemini)
             </span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded border border-[var(--status-recommended-fg)]/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              {health?.aiProviders.geminiInteractions.tier === "paid" ? "⚡ Pro Backup" : "✨ Free Tier"}
+            <span className={`inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium px-1.5 py-0.5 rounded border ${badgeClasses[geminiState.tone]}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${dotClasses[geminiState.tone]}`} />
+              {geminiState.label}
             </span>
           </div>
 
@@ -184,7 +209,7 @@ export function SystemHealthPanel() {
             <div className="flex items-center justify-between">
               <span className="text-[var(--text-muted)]">Failover Active:</span>
               <span className={health?.aiProviders.geminiInteractions.failoverActive ? "text-amber-500" : "text-slate-500"}>
-                {health?.aiProviders.geminiInteractions.failoverActive ? "Yes (Pro Active)" : "No (Normal)"}
+                {gemini?.failoverActive === undefined ? "Unknown" : gemini.failoverActive ? "Active" : "Inactive"}
               </span>
             </div>
             <div className="flex items-center justify-between">

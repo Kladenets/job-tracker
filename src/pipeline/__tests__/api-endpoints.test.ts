@@ -205,6 +205,17 @@ async function runApiTests() {
   await new Promise<void>((resolve) => testServer.listen(0, "127.0.0.1", () => resolve()));
 
   try {
+    const operationalHealthRes = await makeRequest(testServer, { method: "GET", path: "/api/health" });
+    assert.strictEqual(operationalHealthRes.statusCode, 200);
+    assert.ok(["file", "postgres"].includes(operationalHealthRes.body.persistence.engine));
+    assert.ok(["development", "guest", "owner_free", "owner_pro", "none"].includes(
+      operationalHealthRes.body.aiProviders.geminiInteractions.tier
+    ));
+    assert.strictEqual(typeof operationalHealthRes.body.aiProviders.geminiInteractions.failoverActive, "boolean");
+    const dbStatusRes = await makeRequest(testServer, { method: "GET", path: "/api/db/status" });
+    assert.strictEqual(dbStatusRes.statusCode, 200);
+    assert.strictEqual(typeof dbStatusRes.body.postgres.connected, "boolean");
+
     // 1. Test GET /api/candidate-profile
     console.log("[Test 1] Testing GET /api/candidate-profile...");
     const profileRes = await makeRequest(testServer, {

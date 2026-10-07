@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getDatabaseHealthDisplay, getGeminiTierDisplay } from "../../components/system-health-status";
 
 console.log("Running Setup, Profiles & Discovery Runs Unit Tests (Chunk 7)...");
 
@@ -214,6 +215,19 @@ assert.strictEqual(ownerSetup.allowed, true);
 assert.strictEqual(ownerSetup.statusCode, 200);
 
 console.log("  ✔ Guest mode perimeter defense for setup & candidate profile verified");
+
+// ====================================================================
+// Test 5b: Health panel uses actual connection and provider-tier telemetry
+// ====================================================================
+assert.strictEqual(getDatabaseHealthDisplay("file").label, "Active");
+assert.strictEqual(getDatabaseHealthDisplay("postgres", true).label, "Connected");
+assert.strictEqual(getDatabaseHealthDisplay("postgres", false).label, "Unavailable");
+assert.strictEqual(getDatabaseHealthDisplay("postgres").label, "Unknown");
+assert.strictEqual(getGeminiTierDisplay("owner_free").label, "Free Tier");
+assert.strictEqual(getGeminiTierDisplay("owner_pro", true).label, "Pro Backup");
+assert.strictEqual(getGeminiTierDisplay("owner_pro", false).label, "Pro Tier");
+assert.strictEqual(getGeminiTierDisplay("none").label, "Offline");
+console.log("  ✔ Health panel maps database connectivity and exact Gemini tiers accurately");
 
 // ====================================================================
 // Test 6: Unsaved Changes Dirty State Detection

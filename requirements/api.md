@@ -81,5 +81,6 @@ For guest `GET /api/jobs`, public market filters (company, availability, missing
   - Does not persist server-side and cannot access owner conversations, candidate profile, or resume. Guest thread state is client-memory-only and clears on page reload.
   - No application-level guest rate/budget cap is required for the MVP; provider quota is the limit.
 - **AI Health & Provider Status:**
-  - `GET /api/health` returns operational health and configured AI provider/tier telemetry without making billable probes.
+  - `GET /api/health` returns the selected persistence engine and exact Gemini key tier (`development`, `guest`, `owner_free`, `owner_pro`, or `none`) plus failover status, without billable probes.
+  - `GET /api/db/status` returns the active persistence engine and actual PostgreSQL connectivity result; file-backed mode is not reported as PostgreSQL health.
   - AI conversation turn responses include the resolved role/tier telemetry after any owner retry. Guest responses expose only guest-tier status; guest 429s never activate owner failover or use owner keys/history.
