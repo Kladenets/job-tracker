@@ -388,10 +388,41 @@ async function runApiTests() {
       body: {
         status: "saved",
         reason: "User bookmarked job for application",
+        changedBy: "system",
       },
     });
     assert.strictEqual(statusPatchRes.statusCode, 200, "Status patch returns 200");
     assert.strictEqual(statusPatchRes.body.job.job_status, "saved", "Job status updated to saved");
+    const statusRepository = getRepository().repository;
+    const originalUpdateStatus = statusRepository.updateStatus;
+    const recordedStatusActors: string[] = [];
+    statusRepository.updateStatus = async (...args: any[]) => {
+      recordedStatusActors.push(args[2]);
+      return originalUpdateStatus.apply(statusRepository, args);
+    };
+    const originalApiSecretKey = process.env.API_SECRET_KEY;
+    try {
+      const userAuditRes = await makeRequest(testServer, {
+        method: "PATCH",
+        path: `/api/jobs/${createdJob.id}/status`,
+        body: { status: "saved", changedBy: "crawler" },
+      });
+      assert.strictEqual(userAuditRes.statusCode, 200);
+
+      process.env.API_SECRET_KEY = "test-status-audit-key";
+      const systemAuditRes = await makeRequest(testServer, {
+        method: "PATCH",
+        path: `/api/jobs/${createdJob.id}/status`,
+        headers: { Authorization: "Bearer test-status-audit-key" },
+        body: { status: "saved", changedBy: "ai" },
+      });
+      assert.strictEqual(systemAuditRes.statusCode, 200);
+    } finally {
+      statusRepository.updateStatus = originalUpdateStatus;
+      if (originalApiSecretKey === undefined) delete process.env.API_SECRET_KEY;
+      else process.env.API_SECRET_KEY = originalApiSecretKey;
+    }
+    assert.deepStrictEqual(recordedStatusActors, ["user", "system"], "Audit actor must come from authenticated request source, never the body");
     console.log("✓ PATCH /api/jobs/:id/status advanced job workflow status to 'saved'");
 
     // 5. Test POST /api/applications

@@ -56,7 +56,7 @@ Remote resume sync and local resume upload persist the normalized structured res
 | :--- | :---: | :---: |
 | `GET /api/jobs` | Full access with user triage tags | Sanitized list (redacts user status, shows only market postings) |
 | `GET /api/jobs/:id` | Full details, overrides, personal notes | Sanitized details (redacts overrides and personal status) |
-| `PATCH /api/jobs/:id/status` | Permitted for `JobWorkflowStatusSchema` values; invalid status returns 400 without mutation | **403 Forbidden** |
+| `PATCH /api/jobs/:id/status` | Permitted for `JobWorkflowStatusSchema` values; invalid status returns 400 without mutation. Audit actor is server-assigned (`user` for interactive owners, `system` for bearer-token automation); body-supplied `changedBy` is ignored. | **403 Forbidden** |
 | `GET /api/applications` | Full candidate application pipeline | **403 Forbidden** (Restricted page in UI) |
 | `POST/PATCH/DELETE /api/applications` | Permitted | **403 Forbidden** |
 | `GET /api/dashboard/metrics` | Full discovery + private conversion rates | **403 Forbidden** (Restricted page in UI) |

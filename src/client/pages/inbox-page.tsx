@@ -216,7 +216,7 @@ export function InboxPage() {
       const res = await fetch(`/api/jobs/${jobId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, reason, changedBy: "user" }),
+        body: JSON.stringify({ status, reason }),
       });
       if (!res.ok) throw new Error("Failed to update status");
       return res.json();

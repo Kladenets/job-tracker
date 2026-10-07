@@ -233,7 +233,7 @@ app.patch("/api/jobs/:id/status", async (req: Request, res: Response) => {
   try {
     const { repository } = getRepository();
     const status = req.body?.status;
-    const { reason } = req.body ?? {};
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
     if (status === undefined || status === null || status === "") {
       return res.status(400).json({ success: false, error: "Missing 'status' in request body" });
     }
@@ -242,7 +242,8 @@ app.patch("/api/jobs/:id/status", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "Invalid job workflow status" });
     }
 
-    await repository.updateStatus(req.params.id, parsedStatus.data, "user", reason);
+    const changedBy = req.user?.authSource === "bearer-token" ? "system" : "user";
+    await repository.updateStatus(req.params.id, parsedStatus.data, changedBy, reason);
     const updated = await repository.getById(req.params.id);
     return res.json({ success: true, job: updated });
   } catch (error: unknown) {
@@ -1103,24 +1104,6 @@ app.delete("/api/agent/conversations/:id", async (req: Request, res: Response) =
     return res.json({ success: true, message: "Conversation deleted successfully" });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to delete conversation";
-    return res.status(500).json({ success: false, error: message });
-  }
-});
-
-// Update review status with audit history
-app.patch("/api/jobs/:id/status", async (req: Request, res: Response) => {
-  try {
-    const { repository } = getRepository();
-    const { status, changedBy = "user", reason } = req.body;
-    if (!status) {
-      return res.status(400).json({ success: false, error: "Missing required 'status' field" });
-    }
-
-    await repository.updateStatus(req.params.id, status, changedBy, reason);
-    const updated = await repository.getById(req.params.id);
-    return res.json({ success: true, job: updated });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to update status";
     return res.status(500).json({ success: false, error: message });
   }
 });
