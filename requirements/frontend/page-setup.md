@@ -48,7 +48,7 @@
   - Allows selecting target sources (e.g. Greenhouse, Lever, JobSpy).
   - Live execution progress indicator showing:
     - Discovery status (`Discovered: 15`, `Filtered Out: 4`, `JEV Evaluated: 11`).
-  - Displays summary upon completion with a direct link to review new arrivals in `/inbox`.
+  - Displays complete, partial, or failed status, per-source errors, actual positive-fit recommendation count, and a direct link to `/inbox` when any source succeeds.
 
 ### 1.5 System & AI Provider Health Overview
 - Real-time status cards:

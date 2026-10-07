@@ -43,6 +43,11 @@ Supports Page 5 (Setup & Profiles):
 - `PUT /api/search-profile`: Validate and persist active search criteria (target titles, salary minimums, excluded keywords, allowed workplace types, target location, commute radius, and buffer) to the selected repository. Radius and buffer must be between 0 and 500 miles. (Owner only).
 - `GET /api/profile` remains a legacy compatibility alias for retrieving the active search profile; new clients use `/api/search-profile`.
 
+### 2.5 Discovery Runs (`/api/discovery/run`)
+- Owner-only `POST` accepts selected source names and returns a per-source status and error detail.
+- Complete runs return HTTP 200; partial runs return HTTP 207 with successful and failed source details; runs where all selected sources fail return HTTP 502 and `success: false`.
+- `discoveredCount` counts fetched postings. `recommendedCount` counts only processed postings with positive JEV fit (`jevFit === true`), not every posting evaluated by JEV.
+
 Remote resume sync and local resume upload persist the normalized structured resume and derived candidate profile to the same selected repository, regardless of source type. Local JSON seed files are not committed and are not production persistence targets.
 
 ## 3. Role-Based Access Control & Sanitization Rules

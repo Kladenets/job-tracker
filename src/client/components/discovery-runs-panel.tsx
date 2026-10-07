@@ -43,11 +43,13 @@ export function DiscoveryRunsPanel({
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [discoveryResult, setDiscoveryResult] = useState<{
     success: boolean;
+    status?: "complete" | "partial" | "failed";
     summary?: string;
     discoveredCount?: number;
     recommendedCount?: number;
     filteredOutCount?: number;
     error?: string;
+    details?: Array<{ source: string; status: string; error?: string }>;
   } | null>(null);
 
   // Single URL Ingest Handler
@@ -109,21 +111,45 @@ export function DiscoveryRunsPanel({
       });
 
       const data = await res.json();
+      const details = Array.isArray(data.details) ? data.details : undefined;
+      if (data.status === "partial") {
+        setDiscoveryResult({
+          success: false,
+          status: "partial",
+          summary: data.summary,
+          discoveredCount: data.discoveredCount,
+          recommendedCount: data.recommendedCount,
+          filteredOutCount: data.filteredOutCount,
+          details,
+        });
+        onDiscoveryRunSuccess?.();
+        return;
+      }
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Discovery run failed");
+        setDiscoveryResult({
+          success: false,
+          status: data.status === "failed" ? "failed" : undefined,
+          summary: data.summary,
+          error: data.error || data.summary || "Discovery run failed",
+          details,
+        });
+        return;
       }
 
       setDiscoveryResult({
         success: true,
+        status: "complete",
         summary: data.summary,
         discoveredCount: data.discoveredCount,
         recommendedCount: data.recommendedCount,
         filteredOutCount: data.filteredOutCount,
+        details,
       });
       onDiscoveryRunSuccess?.();
     } catch (err: unknown) {
       setDiscoveryResult({
         success: false,
+        status: "failed",
         error: err instanceof Error ? err.message : "Discovery execution failed",
       });
     } finally {
@@ -136,6 +162,9 @@ export function DiscoveryRunsPanel({
       prev.includes(source) ? prev.filter((s) => s !== source) : [...prev, source]
     );
   };
+
+  const partialDiscovery = discoveryResult?.status === "partial";
+  const hasDiscoveryResults = discoveryResult?.success === true || partialDiscovery;
 
   return (
     <div className="space-y-6">
@@ -374,7 +403,9 @@ export function DiscoveryRunsPanel({
             className={`p-3.5 rounded-lg border text-xs space-y-2 ${
               discoveryResult.success
                 ? "bg-[var(--status-recommended-bg)] border-[var(--status-recommended-fg)]/20"
-                : "bg-[var(--status-danger-bg)] border-[var(--status-danger-fg)]/20 text-[var(--status-danger-fg)]"
+                : partialDiscovery
+                  ? "bg-[var(--status-marginal-bg)] border-[var(--status-marginal-fg)]/20"
+                  : "bg-[var(--status-danger-bg)] border-[var(--status-danger-fg)]/20 text-[var(--status-danger-fg)]"
             }`}
           >
             <div className="flex items-center justify-between">
@@ -382,11 +413,15 @@ export function DiscoveryRunsPanel({
                 {discoveryResult.success ? (
                   <CheckCircle2 className="h-4 w-4 text-[var(--status-recommended-fg)]" />
                 ) : (
-                  <AlertCircle className="h-4 w-4 text-[var(--status-danger-fg)]" />
+                  <AlertCircle className={`h-4 w-4 ${partialDiscovery ? "text-[var(--status-marginal-fg)]" : "text-[var(--status-danger-fg)]"}`} />
                 )}
-                {discoveryResult.success ? "Pipeline Run Completed" : "Pipeline Run Failed"}
+                {discoveryResult.success
+                  ? "Pipeline Run Completed"
+                  : partialDiscovery
+                    ? "Pipeline Run Partially Completed"
+                    : "Pipeline Run Failed"}
               </span>
-              {discoveryResult.success && (
+              {hasDiscoveryResults && (
                 <Link
                   to="/inbox"
                   className="inline-flex items-center gap-1 font-semibold text-xs text-[var(--border-focus)] hover:underline"
@@ -397,7 +432,11 @@ export function DiscoveryRunsPanel({
               )}
             </div>
 
-            {discoveryResult.success && (
+            {discoveryResult.summary && (
+              <p className="text-[11px] text-[var(--text-secondary)]">{discoveryResult.summary}</p>
+            )}
+
+            {hasDiscoveryResults && (
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-subtle)] font-mono-tabular text-center">
                 <div className="p-2 rounded bg-[var(--surface-elevated)] border border-[var(--border-subtle)]">
                   <span className="text-[10px] text-[var(--text-muted)] block">Discovered</span>
@@ -412,13 +451,19 @@ export function DiscoveryRunsPanel({
                   </span>
                 </div>
                 <div className="p-2 rounded bg-[var(--surface-elevated)] border border-[var(--border-subtle)]">
-                  <span className="text-[10px] text-[var(--text-muted)] block">JEV Evaluated / Rec</span>
+                  <span className="text-[10px] text-[var(--text-muted)] block">Recommended</span>
                   <span className="text-sm font-bold text-[var(--status-recommended-fg)]">
                     {discoveryResult.recommendedCount ?? 0}
                   </span>
                 </div>
               </div>
             )}
+
+            {discoveryResult.details?.filter((detail) => detail.status === "failed").map((detail) => (
+              <p key={detail.source} className="text-[11px] text-[var(--status-danger-fg)]">
+                {detail.source}: {detail.error || "Source failed"}
+              </p>
+            ))}
 
             {discoveryResult.error && (
               <p className="text-[11px] text-[var(--status-danger-fg)]">{discoveryResult.error}</p>

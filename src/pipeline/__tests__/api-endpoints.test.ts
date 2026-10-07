@@ -4,6 +4,8 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fetchSafeResumeText } from "../../utils/safe-resume-fetch";
+import { sourceRegistry } from "../../adapters";
+import { jevClassifier } from "../../ai/jev-classifier";
 
 console.log("=== Running End-to-End HTTP API Endpoint Tests ===");
 
@@ -467,6 +469,85 @@ async function runApiTests() {
     assert.ok(metricsRes.body.metrics.applications.appliedCount > 0, "Applied count > 0");
     assert.strictEqual(metricsRes.body.metrics.applications.isSmallSample, true, "Small sample guard active");
     console.log("✓ GET /api/dashboard/metrics returned valid funnel and conversion rates");
+
+    const greenhouseAdapter = sourceRegistry.get("greenhouse")!;
+    const leverAdapter = sourceRegistry.get("lever")!;
+    const originalGreenhouseFetch = greenhouseAdapter.fetchJobs;
+    const originalLeverFetch = leverAdapter.fetchJobs;
+    const originalClassifier = jevClassifier.classify;
+    try {
+      greenhouseAdapter.fetchJobs = async () => [
+        {
+          id: "discovery-fit-job",
+          site: "greenhouse",
+          title: "Software Engineer",
+          company: "Discovery Fit Co",
+          location: "Remote, US",
+          is_remote: true,
+          description: "A software engineering role.",
+          job_url: "https://boards.greenhouse.io/test/jobs/discovery-fit-job",
+        },
+        {
+          id: "discovery-nonfit-job",
+          site: "greenhouse",
+          title: "Operations Analyst",
+          company: "Discovery Nonfit Co",
+          location: "Remote, US",
+          is_remote: true,
+          description: "An operations role.",
+          job_url: "https://boards.greenhouse.io/test/jobs/discovery-nonfit-job",
+        },
+      ];
+      jevClassifier.classify = async (posting) => ({
+        fit: posting.title === "Software Engineer",
+        confidence: posting.title === "Software Engineer" ? 0.9 : 0.4,
+        reason: "Test classifier result",
+        model: "test",
+        latencyMs: 0,
+      });
+
+      const completeDiscoveryRes = await makeRequest(testServer, {
+        method: "POST",
+        path: "/api/discovery/run",
+        body: { sources: ["greenhouse"] },
+      });
+      assert.strictEqual(completeDiscoveryRes.statusCode, 200);
+      assert.strictEqual(completeDiscoveryRes.body.status, "complete");
+      assert.strictEqual(completeDiscoveryRes.body.details[0].screenedWithJev, 2);
+      assert.strictEqual(completeDiscoveryRes.body.recommendedCount, 1, "Only positive JEV fits count as recommendations");
+
+      greenhouseAdapter.fetchJobs = async () => [];
+      leverAdapter.fetchJobs = async () => {
+        throw new Error("Lever unavailable for test");
+      };
+      const partialDiscoveryRes = await makeRequest(testServer, {
+        method: "POST",
+        path: "/api/discovery/run",
+        body: { sources: ["greenhouse", "lever"] },
+      });
+      assert.strictEqual(partialDiscoveryRes.statusCode, 207);
+      assert.strictEqual(partialDiscoveryRes.body.status, "partial");
+      assert.strictEqual(partialDiscoveryRes.body.success, false);
+      assert.strictEqual(partialDiscoveryRes.body.details[1].status, "failed");
+      assert.match(partialDiscoveryRes.body.details[1].error, /Lever unavailable/);
+
+      greenhouseAdapter.fetchJobs = async () => {
+        throw new Error("Greenhouse unavailable for test");
+      };
+      const failedDiscoveryRes = await makeRequest(testServer, {
+        method: "POST",
+        path: "/api/discovery/run",
+        body: { sources: ["greenhouse"] },
+      });
+      assert.strictEqual(failedDiscoveryRes.statusCode, 502);
+      assert.strictEqual(failedDiscoveryRes.body.status, "failed");
+      assert.strictEqual(failedDiscoveryRes.body.success, false);
+      assert.match(failedDiscoveryRes.body.details[0].error, /Greenhouse unavailable/);
+    } finally {
+      greenhouseAdapter.fetchJobs = originalGreenhouseFetch;
+      leverAdapter.fetchJobs = originalLeverFetch;
+      jevClassifier.classify = originalClassifier;
+    }
 
     // 9. Test DELETE /api/applications/:id
     console.log("[Test 9] Testing DELETE /api/applications/:id...");

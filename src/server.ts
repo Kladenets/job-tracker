@@ -631,74 +631,112 @@ app.post("/api/discovery/run", async (req: Request, res: Response) => {
       });
     }
 
-    const selectedSources =
-      Array.isArray(req.body.sources) && req.body.sources.length > 0
-        ? req.body.sources
-        : ["greenhouse", "lever"];
+    const requestedSources = req.body?.sources;
+    let selectedSources = ["greenhouse", "lever"];
+    if (Array.isArray(requestedSources) && requestedSources.length > 0) {
+      if (!requestedSources.every((source: unknown): source is string => typeof source === "string" && source.trim().length > 0)) {
+        return res.status(400).json({ success: false, error: "Discovery sources must be non-empty strings" });
+      }
+      selectedSources = Array.from(new Set(requestedSources.map((source: string) => source.toLowerCase())));
+      const unknownSources = selectedSources.filter((source) => !sourceRegistry.list().includes(source));
+      if (unknownSources.length > 0) {
+        return res.status(400).json({ success: false, error: `Unsupported discovery sources: ${unknownSources.join(", ")}` });
+      }
+    }
 
     let totalDiscovered = 0;
     let totalRecommended = 0;
     let totalFiltered = 0;
     const details: any[] = [];
+    const runSource = async (
+      source: string,
+      fetchJobs: () => Promise<RawJobPosting[]>,
+      ingestLimit?: number
+    ) => {
+      let discovered = 0;
+      try {
+        const jobs = await fetchJobs();
+        discovered = jobs.length;
+        totalDiscovered += discovered;
+        const result = await ingestRawPostings(ingestLimit ? jobs.slice(0, ingestLimit) : jobs);
+        const recommendedCount = result.items.filter((item) => item.jevFit === true).length;
+        totalRecommended += recommendedCount;
+        totalFiltered += result.filteredOut;
+        details.push({
+          ...result,
+          source,
+          status: "succeeded",
+          discovered,
+          recommendedCount,
+          filteredOutCount: result.filteredOut,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : `${source} discovery failed`;
+        console.warn(`${source} run error:`, err);
+        details.push({ source, status: "failed", discovered, error: message });
+      }
+    };
 
     // 1. Greenhouse crawl
     if (selectedSources.includes("greenhouse")) {
-      try {
+      await runSource("greenhouse", async () => {
         const gh = sourceRegistry.get("greenhouse") as GreenhouseAdapter;
-        const ghJobs = await gh.fetchJobs({ boardToken: "gitlab", searchTerm: "engineer" });
-        totalDiscovered += ghJobs.length;
-        const resIngest = await ingestRawPostings(ghJobs.slice(0, 15));
-        totalRecommended += resIngest.screenedWithJev;
-        totalFiltered += resIngest.filteredOut;
-        details.push({ source: "greenhouse", discovered: ghJobs.length, ...resIngest });
-      } catch (e) {
-        console.warn("Greenhouse run error:", e);
-      }
+        return gh.fetchJobs({ boardToken: "gitlab", searchTerm: "engineer" });
+      }, 15);
     }
 
     // 2. Lever crawl
     if (selectedSources.includes("lever")) {
-      try {
+      await runSource("lever", async () => {
         const lever = sourceRegistry.get("lever") as LeverAdapter;
-        const leverJobs = await lever.fetchJobs({ company: "palantir", searchTerm: "engineer" });
-        totalDiscovered += leverJobs.length;
-        const resIngest = await ingestRawPostings(leverJobs.slice(0, 15));
-        totalRecommended += resIngest.screenedWithJev;
-        totalFiltered += resIngest.filteredOut;
-        details.push({ source: "lever", discovered: leverJobs.length, ...resIngest });
-      } catch (e) {
-        console.warn("Lever run error:", e);
-      }
+        return lever.fetchJobs({ company: "palantir", searchTerm: "engineer" });
+      }, 15);
     }
 
     // 3. JobSpy scrape
     if (selectedSources.includes("jobspy")) {
-      try {
+      await runSource("jobspy", async () => {
         const scrape = await runJobSpyScraper({
           searchTerm: "Software Engineer",
           location: "Remote",
           sites: ["indeed"],
           resultsWanted: 5,
         });
-        totalDiscovered += scrape.jobs.length;
-        const resIngest = await ingestRawPostings(scrape.jobs);
-        totalRecommended += resIngest.screenedWithJev;
-        totalFiltered += resIngest.filteredOut;
-        details.push({ source: "jobspy", discovered: scrape.jobs.length, ...resIngest });
-      } catch (e) {
-        console.warn("JobSpy run error:", e);
-      }
+        return scrape.jobs;
+      });
     }
 
-    return res.json({
-      success: true,
-      summary: `Discovery run complete across ${selectedSources.length} sources`,
+    const completedSources = details.filter((detail) => detail.status === "succeeded").length;
+    const failedSources = details.filter((detail) => detail.status === "failed");
+    const status = failedSources.length === 0
+      ? "complete"
+      : completedSources === 0
+        ? "failed"
+        : "partial";
+    const summary = status === "complete"
+      ? `Discovery run completed across ${selectedSources.length} sources`
+      : status === "partial"
+        ? `Discovery run partially completed: ${completedSources} of ${selectedSources.length} sources succeeded`
+        : `Discovery run failed: all ${selectedSources.length} selected sources failed`;
+    const payload = {
+      success: status === "complete",
+      status,
+      summary,
       discoveredCount: totalDiscovered,
       recommendedCount: totalRecommended,
       filteredOutCount: totalFiltered,
       sources: selectedSources,
       details,
-    });
+      errors: failedSources.map(({ source, error }) => ({ source, error })),
+    };
+
+    if (status === "failed") {
+      return res.status(502).json({ ...payload, error: "All selected discovery sources failed" });
+    }
+    if (status === "partial") {
+      return res.status(207).json(payload);
+    }
+    return res.json(payload);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Discovery run failed";
     return res.status(500).json({ success: false, error: message });
