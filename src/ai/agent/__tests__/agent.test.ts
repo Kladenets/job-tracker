@@ -12,6 +12,7 @@ import {
   SearchSavedJobsTool,
   NameConversationTool,
 } from "../tools";
+import { createDefaultTools } from "../tools";
 import { GeminiAgent } from "../gemini-agent";
 import { UnifiedJobPosting } from "../../../types/job-posting";
 
@@ -33,6 +34,10 @@ async function runAgentSuite() {
 
   const repository = new FileJobRepository(testStorePath);
   const profile = loadSearchProfile();
+
+  const defaultToolNames = createDefaultTools().map((tool) => tool.name);
+  assert(!defaultToolNames.includes("ingest_resume"), "Conversation tools must not mutate canonical candidate profile or resume records");
+  console.log("✓ Default conversation tool inventory excludes candidate-profile/resume mutation");
 
   // Seed sample job into repository
   const sampleJob: UnifiedJobPosting = {

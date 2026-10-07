@@ -7,7 +7,8 @@
   - Full Name, Email, Current/Target Job Title, Years of Experience, Location, and Workplace Preference.
   - Core Technical Skills (tag input with auto-population from resume).
   - **Resume Source Management**:
-    - Supports two distinct source types: `remote_url` (e.g. GitHub Gist raw URL, `https://kylekent.dev/...`) and `file_upload` (`.json`, `.md`, `.txt`, `.pdf`).
+    - Supports two distinct source types: `remote_url` (a URL serving JSON Resume JSON, e.g. GitHub Gist raw URL or personal website) and `file_upload` (JSON Resume `.json` only for MVP).
+    - Non-JSON uploads (PDF, Markdown, plain text) are unsupported in the MVP and must be rejected rather than silently summarized or normalized.
     - Source is always editable via "Edit Source" / "Change Source" control regardless of current configuration.
     - Confirmation dialog required when switching source types (`remote_url` $\leftrightarrow$ `file_upload`) to prevent accidental configuration abandonment.
   - **Contextual "Sync Resume Now" Trigger**:
@@ -25,6 +26,7 @@
     - Concise unstructured text field for side projects, upcoming certs, or context not present on the formal resume, directly incorporated by the AI agent for fit scoring, interview prep, and cover letter drafting.
   - Save button persisting changes via `PUT /api/candidate-profile` to the selected repository. PostgreSQL `user_profiles` is canonical when PostgreSQL is enabled; file-backed mode stores the record in its ignored local data file.
   - Remote sync and local upload both persist the normalized structured resume and derived candidate profile through the same repository. Local seed JSON files are optional, ignored by Git, and never runtime write targets.
+  - Future non-JSON extraction must be a separate explicit owner action that presents extracted fields for review and requires confirmation before saving.
 
 ### 1.2 Search Profile & Deterministic Rules Editor
 - Visual editor for the active repository-backed search profile (`GET/PUT /api/search-profile`):

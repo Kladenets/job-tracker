@@ -1,10 +1,44 @@
 import fs from "fs";
 import path from "path";
+import { z } from "zod";
 import { StructuredResume, ResumeSource } from "../types/resume";
 import { JobPostingRepository } from "../db/repository-interface";
 
 const candidateProfilePath = path.join(process.cwd(), "config", "candidate_profile.json");
 const candidateResumePath = path.join(process.cwd(), "config", "candidate_resume.json");
+const ResumeSectionSchema = z.array(z.record(z.string(), z.unknown()));
+
+export const JsonResumeDocumentSchema = z.object({
+  meta: z.record(z.string(), z.unknown()).optional(),
+  basics: z.record(z.string(), z.unknown()),
+  work: ResumeSectionSchema.optional(),
+  volunteer: ResumeSectionSchema.optional(),
+  education: ResumeSectionSchema.optional(),
+  awards: ResumeSectionSchema.optional(),
+  certificates: ResumeSectionSchema.optional(),
+  publications: ResumeSectionSchema.optional(),
+  skills: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])).optional(),
+  languages: ResumeSectionSchema.optional(),
+  interests: ResumeSectionSchema.optional(),
+  references: ResumeSectionSchema.optional(),
+  projects: ResumeSectionSchema.optional(),
+}).passthrough();
+
+export function parseJsonResume(content: string): StructuredResume {
+  let document: unknown;
+  try {
+    document = JSON.parse(content);
+  } catch {
+    throw new Error("Resume upload must be valid JSON in JSON Resume format.");
+  }
+
+  const parsed = JsonResumeDocumentSchema.safeParse(document);
+  if (!parsed.success) {
+    throw new Error("Resume JSON must include a basics object and valid JSON Resume sections.");
+  }
+
+  return normalizeStructuredResume(parsed.data);
+}
 
 /**
  * Load active candidate profile

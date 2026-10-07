@@ -18,6 +18,8 @@ The batch job analyzer and interactive application assistant must remain separat
 
 Public guest chat is a separate, stateless capability. It receives only public job context and bounded user/assistant history, uses a dedicated guest provider key, and never loads candidate profiles/resumes or owner conversation history. The browser holds guest turns in memory only until page reload.
 
+The conversational agent must not ingest or overwrite canonical candidate-profile or resume records. Future PDF/Markdown/plain-text resume extraction belongs in an explicit Setup workflow that previews proposed fields and waits for owner confirmation before persistence.
+
 ## Approved context
 
 The agent may receive only context selected for the task:
@@ -70,6 +72,8 @@ It may explain such a question and ask the user to answer it directly. Sensitive
 ## Tool policy
 
 Initial agent capabilities must be read-only except for saving a local draft. They must cover retrieval of the selected job and analysis, retrieval of approved candidate or resume information, retrieval of approved prior answers when available, and saving an application draft.
+
+The conversational agent must not ingest or overwrite the canonical candidate profile or structured resume. Resume upload/sync and profile editing are explicit owner actions through the Setup API/UI; the agent may only read those repository-backed records when preparing assistance.
 
 Requirements:
 

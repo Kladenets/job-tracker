@@ -123,7 +123,7 @@
   - Full Name, Email, Target Role Title, Location, Workplace Preference, and Years of Experience controls.
   - Interactive technical skills tag editor with quick add chips and comma/Enter key bindings.
   - **Structured Resume Source Management**:
-    - Dual source configuration modes: `remote_url` (e.g. GitHub Gist raw URL, `kylekent.dev`) and `file_upload` (`.json`, `.md`, `.txt`, `.pdf`).
+    - Dual source configuration modes: `remote_url` serving JSON Resume JSON (e.g. GitHub Gist raw URL, `kylekent.dev`) and `file_upload` (JSON Resume `.json` only for MVP).
     - Edit source toggle with confirmation dialog when switching source types to prevent accidental loss of configuration.
   - **Contextual Manual "Sync Resume Now" Trigger**:
     - Strictly visible only when source is `remote_url` (completely hidden for local `file_upload` mode).

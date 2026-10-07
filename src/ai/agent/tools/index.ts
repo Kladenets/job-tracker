@@ -5,7 +5,6 @@ import { DraftCoverLetterTool } from "./draft-cover-letter.tool";
 import { GenerateInterviewPrepTool } from "./generate-interview-prep.tool";
 import { SearchSavedJobsTool } from "./search-saved-jobs.tool";
 import { NameConversationTool } from "./name-conversation.tool";
-import { IngestResumeTool } from "./ingest-resume.tool";
 
 export {
   GetJobDetailsTool,
@@ -14,7 +13,6 @@ export {
   GenerateInterviewPrepTool,
   SearchSavedJobsTool,
   NameConversationTool,
-  IngestResumeTool,
 };
 
 /**
@@ -28,6 +26,5 @@ export function createDefaultTools(): Tool[] {
     new GenerateInterviewPrepTool(),
     new SearchSavedJobsTool(),
     new NameConversationTool(),
-    new IngestResumeTool(),
   ];
 }

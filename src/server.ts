@@ -23,7 +23,7 @@ import { resolveGeminiApiKey } from "./ai/key-resolver";
 import {
   getCandidateProfile,
   getCandidateResume,
-  normalizeStructuredResume,
+  parseJsonResume,
   deriveProfileFromResume,
 } from "./utils/resume-sync";
 import { UnifiedJobPosting } from "./types/job-posting";
@@ -350,28 +350,13 @@ app.post("/api/candidate-profile/sync-resume", async (req: Request, res: Respons
       throw new Error(`Failed to fetch resume from ${targetUrl}: HTTP ${response.status} ${response.statusText}`);
     }
 
-    const contentType = response.headers.get("content-type") || "";
-    let parsedData: any = null;
-
-    if (contentType.includes("application/json") || targetUrl.endsWith(".json")) {
-      parsedData = await response.json();
-    } else {
-      const text = await response.text();
-      try {
-        parsedData = JSON.parse(text);
-      } catch {
-        // Fallback for non-JSON text
-        parsedData = {
-          basics: {
-            name: currentProfile.fullName,
-            url: targetUrl,
-            summary: text.slice(0, 500),
-          },
-        };
-      }
+    let structured;
+    try {
+      structured = parseJsonResume(await response.text());
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Remote resume is invalid";
+      return res.status(422).json({ success: false, error: message });
     }
-
-    const structured = normalizeStructuredResume(parsedData);
     const result = deriveProfileFromResume(structured, {
       type: "remote_url",
       url: targetUrl,
@@ -403,27 +388,28 @@ app.post("/api/candidate-profile/upload-resume", async (req: Request, res: Respo
       });
     }
 
-    const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
-    const fileName = typeof req.body.fileName === "string" ? req.body.fileName : "uploaded_resume.json";
+    const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+    const fileName = typeof req.body?.fileName === "string" ? req.body.fileName : "uploaded_resume.json";
+
+    if (!fileName.toLowerCase().endsWith(".json")) {
+      return res.status(400).json({
+        success: false,
+        error: "Only JSON Resume (.json) files are supported for MVP uploads.",
+      });
+    }
 
     if (!content) {
       return res.status(400).json({ success: false, error: "Empty resume file content received." });
     }
 
-    let parsedData: any = null;
+    let structured;
     try {
-      parsedData = JSON.parse(content);
-    } catch {
-      // Non-JSON fallback representation
-      parsedData = {
-        basics: {
-          name: "Candidate",
-          summary: content.slice(0, 500),
-        },
-      };
+      structured = parseJsonResume(content);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Resume JSON is invalid";
+      return res.status(400).json({ success: false, error: message });
     }
 
-    const structured = normalizeStructuredResume(parsedData);
     const { repository } = getRepository();
     const currentProfile = await getCandidateProfile(repository);
     const result = deriveProfileFromResume(structured, {

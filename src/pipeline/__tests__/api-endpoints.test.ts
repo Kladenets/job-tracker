@@ -165,6 +165,38 @@ async function runApiTests() {
     assert.strictEqual(updateRes.body.profile.bio, updatedBio, "Updated bio matches");
     console.log("✓ PUT /api/candidate-profile persisted updated profile to repository");
 
+    const pdfUploadRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/candidate-profile/upload-resume",
+      body: { fileName: "resume.pdf", content: "%PDF-1.7 binary content" },
+    });
+    assert.strictEqual(pdfUploadRes.statusCode, 400, "PDF uploads are not supported in the JSON-only MVP");
+
+    const malformedResumeRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/candidate-profile/upload-resume",
+      body: { fileName: "resume.json", content: "{ not valid JSON" },
+    });
+    assert.strictEqual(malformedResumeRes.statusCode, 400, "Malformed resume JSON must be rejected");
+
+    const wrongShapeResumeRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/candidate-profile/upload-resume",
+      body: { fileName: "resume.json", content: JSON.stringify({ work: [] }) },
+    });
+    assert.strictEqual(wrongShapeResumeRes.statusCode, 400, "Non-JSON-Resume JSON must be rejected");
+
+    const unchangedCandidateRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/candidate-profile",
+    });
+    assert.deepStrictEqual(
+      unchangedCandidateRes.body.profile,
+      updateRes.body.profile,
+      "Rejected resume uploads must not mutate the stored candidate profile"
+    );
+    console.log("✓ Unsupported/malformed resume uploads are rejected without changing stored candidate data");
+
     // 2a. Test resume upload persists normalized resume and derived profile to the repository
     const resumeUploadRes = await makeRequest(testServer, {
       method: "POST",

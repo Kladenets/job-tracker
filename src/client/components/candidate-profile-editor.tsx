@@ -174,7 +174,15 @@ export function CandidateProfileEditor({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      setPendingFileName("");
+      setPendingFileContent("");
+      setSyncStatus({ type: "error", msg: "Only JSON Resume (.json) files are supported." });
+      e.target.value = "";
+      return;
+    }
     setPendingFileName(file.name);
+    setSyncStatus(null);
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
@@ -822,9 +830,9 @@ export function CandidateProfileEditor({
               >
                 <Upload className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold text-[var(--text-primary)] block">Upload File</span>
+                  <span className="font-bold text-[var(--text-primary)] block">Upload JSON Resume</span>
                   <span className="text-[11px] text-[var(--text-secondary)]">
-                    .json, .pdf, or .md document
+                    JSON Resume format (.json)
                   </span>
                 </div>
               </button>
@@ -865,11 +873,11 @@ export function CandidateProfileEditor({
             ) : (
               <div className="space-y-2 text-xs">
                 <label className="font-semibold text-[var(--text-primary)]">
-                  Select Local Resume Document
+                  Select JSON Resume File
                 </label>
                 <input
                   type="file"
-                  accept=".json,.txt,.md,.pdf"
+                  accept=".json,application/json"
                   onChange={handleFileChange}
                   className="w-full text-xs text-[var(--text-secondary)] file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border file:border-[var(--border-subtle)] file:bg-[var(--surface-sunken)] file:text-xs file:font-semibold file:cursor-pointer"
                 />
