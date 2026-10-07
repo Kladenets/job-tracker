@@ -27,6 +27,7 @@ export interface AgentConfig {
   readonly apiKey?: string;
   readonly role?: "owner" | "guest";
   readonly preferProBackup?: boolean;
+  readonly clientFactory?: (apiKey: string) => Pick<GoogleGenAI, "interactions">;
 }
 
 export interface AgentTurnResult {
@@ -35,12 +36,22 @@ export interface AgentTurnResult {
 }
 
 export class GeminiAgent {
-  readonly #client: GoogleGenAI | null = null;
+  #client: Pick<GoogleGenAI, "interactions"> | null = null;
+  readonly #clientFactory: (apiKey: string) => Pick<GoogleGenAI, "interactions">;
   readonly #model: string;
   readonly #tools: readonly Tool[];
-  readonly activeTier: string;
+  activeTier: string;
 
   constructor(config?: AgentConfig) {
+    this.#clientFactory = config?.clientFactory ?? ((apiKey) => new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    }));
+
     let resolvedKey = config?.apiKey;
     let tier = "custom";
 
@@ -56,14 +67,7 @@ export class GeminiAgent {
     this.activeTier = tier;
 
     if (resolvedKey && resolvedKey.trim().length > 0) {
-      this.#client = new GoogleGenAI({
-        apiKey: resolvedKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build",
-          },
-        },
-      });
+      this.#client = this.#clientFactory(resolvedKey);
     }
 
     this.#model = config?.model || DEFAULT_GEMINI_MODEL;
@@ -99,18 +103,9 @@ export class GeminiAgent {
     }
 
     try {
-      const toolCallsExecuted: ToolCallExecution[] = [];
-      const text =
-        this.#tools.length === 0
-          ? await this.#generatePlain(conversation)
-          : await this.#generateWithTools(conversation, context, toolCallsExecuted);
-
-      conversation.addMessage("assistant", text, toolCallsExecuted);
-
-      return {
-        text,
-        toolCalls: toolCallsExecuted,
-      };
+      const result = await this.#generateTurn(conversation, context);
+      conversation.addMessage("assistant", result.text, result.toolCalls);
+      return result;
     } catch (err: unknown) {
       const errAny = err as any;
       const msg = err instanceof Error ? err.message : String(err);
@@ -121,19 +116,49 @@ export class GeminiAgent {
         msg.includes("RESOURCE_EXHAUSTED") ||
         msg.includes("quota");
 
-      if (isRateLimit && !isFailoverActive()) {
-        console.warn("[GeminiAgent] HTTP 429 / Quota exhaustion detected on primary tier. Triggering failover to PROD_GEMINI_API_KEY_PRO.");
-        triggerProFailover();
+      let failure: unknown = err;
+      if (isRateLimit && this.activeTier === "owner_free") {
+        const backup = resolveGeminiApiKey({ role: "owner", preferProBackup: true });
+        if (backup.tier === "owner_pro" && backup.apiKey) {
+          if (!isFailoverActive()) {
+            console.warn("[GeminiAgent] Owner free-tier quota exhausted. Activating Pro failover.");
+            triggerProFailover();
+          }
+
+          this.#client = this.#clientFactory(backup.apiKey);
+          this.activeTier = backup.tier;
+          try {
+            const result = await this.#generateTurn(conversation, context);
+            conversation.addMessage("assistant", result.text, result.toolCalls);
+            return result;
+          } catch (retryError: unknown) {
+            failure = retryError;
+          }
+        }
       }
 
+      const failureAny = failure as any;
+      const failureMessage = failure instanceof Error ? failure.message : String(failure);
       console.warn(
         `[GeminiAgent] Generation error:`,
-        msg,
-        errAny?.status,
-        JSON.stringify(errAny?.error || errAny?.errorDetails || errAny?.response || {})
+        failureMessage,
+        failureAny?.status,
+        JSON.stringify(failureAny?.error || failureAny?.errorDetails || failureAny?.response || {})
       );
-      return this.#runFallbackSimulation(prompt, conversation, context, msg);
+      return this.#runFallbackSimulation(prompt, conversation, context, failureMessage);
     }
+  }
+
+  async #generateTurn(
+    conversation: Conversation,
+    context: ToolContext
+  ): Promise<AgentTurnResult> {
+    const toolCallsExecuted: ToolCallExecution[] = [];
+    const text = this.#tools.length === 0
+      ? await this.#generatePlain(conversation)
+      : await this.#generateWithTools(conversation, context, toolCallsExecuted);
+
+    return { text, toolCalls: toolCallsExecuted };
   }
 
   /**

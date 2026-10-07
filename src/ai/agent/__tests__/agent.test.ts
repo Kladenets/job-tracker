@@ -4,6 +4,7 @@ import { Conversation } from "../conversation";
 import { FileJobRepository } from "../../../db/file-repository";
 import { loadSearchProfile } from "../../../config/search-profile";
 import { ToolContext } from "../tool";
+import type { GoogleGenAI } from "@google/genai";
 import {
   GetJobDetailsTool,
   AnalyzeQualificationFitTool,
@@ -14,12 +15,106 @@ import {
 } from "../tools";
 import { createDefaultTools } from "../tools";
 import { GeminiAgent } from "../gemini-agent";
+import { isFailoverActive, resetFailover } from "../../key-resolver";
 import { UnifiedJobPosting } from "../../../types/job-posting";
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
     console.error(`❌ Assertion Failed: ${message}`);
     throw new Error(`Assertion Failed: ${message}`);
+  }
+}
+
+async function runQuotaFailoverTests(context: ToolContext) {
+  const envKeys = [
+    "NODE_ENV",
+    "APP_ENV",
+    "GEMINI_API_KEY",
+    "DEVELOPMENT_GEMINI_API_KEY",
+    "PROD_GUEST_GEMINI_API_KEY_FREE",
+    "GUEST_GEMINI_API_KEY",
+    "PROD_GEMINI_API_KEY_FREE",
+    "GEMINI_API_KEY_FREE",
+    "PROD_GEMINI_API_KEY_PRO",
+    "GEMINI_API_KEY_PRO",
+  ] as const;
+  const originalEnv = new Map(envKeys.map((key) => [key, process.env[key]]));
+
+  try {
+    for (const key of envKeys) delete process.env[key];
+    process.env.NODE_ENV = "production";
+    process.env.PROD_GUEST_GEMINI_API_KEY_FREE = "guest-key";
+    process.env.PROD_GEMINI_API_KEY_FREE = "owner-free-key";
+    process.env.PROD_GEMINI_API_KEY_PRO = "owner-pro-key";
+    resetFailover();
+
+    let guestCalls = 0;
+    const guestKeys: string[] = [];
+    const guestAgent = new GeminiAgent({
+      role: "guest",
+      tools: [],
+      clientFactory: (apiKey) => {
+        guestKeys.push(apiKey);
+        return {
+          interactions: {
+            create: async () => {
+              guestCalls += 1;
+              throw Object.assign(new Error("guest quota exhausted"), { status: 429 });
+            },
+          },
+        } as unknown as Pick<GoogleGenAI, "interactions">;
+      },
+    });
+    const guestConversation = new Conversation();
+    await guestAgent.run("Explain this public role", guestConversation, {
+      repository: context.repository,
+      profile: context.profile,
+    });
+    assert(guestAgent.activeTier === "guest", "Guest quota errors must preserve the guest tier");
+    assert(guestCalls === 1, "Guest quota errors must not retry against another key");
+    assert(guestKeys.join(",") === "guest-key", "Guest requests must never resolve the owner Pro key");
+    assert(!isFailoverActive(), "Guest quota errors must not activate owner failover");
+    console.log("✓ Guest 429 remains isolated to the guest key and does not activate owner failover");
+
+    let ownerCalls = 0;
+    const ownerKeys: string[] = [];
+    const ownerAgent = new GeminiAgent({
+      role: "owner",
+      tools: [],
+      clientFactory: (apiKey) => {
+        ownerKeys.push(apiKey);
+        return {
+          interactions: {
+            create: async () => {
+              ownerCalls += 1;
+              if (apiKey === "owner-free-key") {
+                throw Object.assign(new Error("owner quota exhausted"), { status: 429 });
+              }
+              return { output_text: "Owner turn completed using Pro." };
+            },
+          },
+        } as unknown as Pick<GoogleGenAI, "interactions">;
+      },
+    });
+    const ownerConversation = new Conversation();
+    const ownerResult = await ownerAgent.run("Review my saved role", ownerConversation, {
+      repository: context.repository,
+      profile: context.profile,
+    });
+    assert(ownerCalls === 2, "An owner free-tier 429 must retry exactly once");
+    assert(ownerKeys.join(",") === "owner-free-key,owner-pro-key", "Owner retry must use the configured Pro key");
+    assert(ownerAgent.activeTier === "owner_pro", "Successful owner retry must report the Pro tier");
+    assert(ownerResult.text === "Owner turn completed using Pro.", "Owner retry must return the retried turn result");
+    assert(ownerConversation.getMessages().length === 2, "Owner retry must not duplicate the user turn");
+    assert(isFailoverActive(), "Owner free-tier quota errors must activate the cooldown");
+    console.log("✓ Owner 429 retries the current turn once on Pro and activates owner failover");
+  } finally {
+    for (const key of envKeys) {
+      const value = originalEnv.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    resetFailover();
   }
 }
 
@@ -193,6 +288,9 @@ async function runAgentSuite() {
   const lastMsg = conv.getMessages()[2];
   assert(lastMsg.role === "assistant", "Last message should have role 'assistant'");
   console.log("✓ GeminiAgent executed turn and recorded messages successfully");
+
+  // 3b. Verify tier-isolated quota failover and same-turn owner retry.
+  await runQuotaFailoverTests(context);
 
   // 4. Test Conversation Persistence in Repository
   console.log("\n[Test 4] Testing conversation persistence in repository...");

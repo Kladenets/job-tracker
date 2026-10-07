@@ -19,9 +19,9 @@ Provide a local web interface for configuration, recommendation review, applicat
   - An unobtrusive status indicator in the header / agent control bar communicating the active engine state:
     - `AI Engine: Dev Mode (Development Key)` — when running locally or on staging.
     - `AI Engine: Online (Free Tier)` — when operating on the zero-cost primary key in production.
-    - `AI Engine: Online (Pro Backup - Failover Active)` — when an HTTP 429 quota exhaustion has automatically switched the session to the paid pro backup.
+    - `AI Engine: Online (Pro Backup - Failover Active)` — while the process-wide owner failover cooldown is active after an owner free-tier HTTP 429.
     - `AI Engine: Simulated / Offline Mode` — when no API key is available or both tiers are exhausted.
-  - **Failover Notification:** A subtle toast or banner when an HTTP 429 occurs: *"Free tier rate limit reached. Switched seamlessly to backup Pro tier."*
+  - **Failover Notification:** A subtle toast or banner when an owner free-tier HTTP 429 causes the current turn to retry with Pro: *"Free tier rate limit reached. Retried this turn on the Pro backup."* Guest quota errors instead show the guest capacity state and never mention or activate owner Pro.
 - **Public Guest View Telemetry:**
   - A clean, consumer-facing status indicator: `AI Assistant: Online` (or `AI Assistant: Capacity Reached` if the guest quota is exhausted).
   - All internal infrastructure terminology (`Free Tier`, `Pro Backup`, `Development Key`) is strictly hidden from guest visitors.

@@ -48,7 +48,8 @@ To optimize operating costs, protect against quota exhaustion, and isolate publi
   - The default key used for owner operations in production at zero operating cost.
 - **`PROD_GEMINI_API_KEY_PRO` (Production Owner Backup - Paid Tier):**
   - High-quota paid/Pay-As-You-Go Google AI Studio token.
-  - Automatically activated if `PROD_GEMINI_API_KEY_FREE` returns HTTP 429 (Resource Exhausted / Rate Limit Exceeded) or fails a session rate-limit pre-flight probe.
+  - Activated only when an owner request using `PROD_GEMINI_API_KEY_FREE` receives HTTP 429 (Resource Exhausted / Rate Limit Exceeded); the current owner turn is retried once with this key.
+  - Guest quota errors must never activate this owner backup or change guest key resolution.
 
 ### 2. Server-Side Key Resolution Precedence & Fallback
 The server resolves keys deterministically without exposing them to the client:
@@ -61,9 +62,9 @@ The server resolves keys deterministically without exposing them to the client:
    - If neither production key is set, fall back to `GEMINI_API_KEY` (`tier: "development"`).
 4. **Offline Resilient Mode:** If no valid key resolves for the requested role/environment, the server executes deterministic offline simulation (`tier: "none"`), ensuring that neither interactive agents nor background triage crash.
 
-### 3. Failover Execution & Session State Tracking
-- **Failover Trigger:** When an active call to Gemini using `PROD_GEMINI_API_KEY_FREE` returns HTTP 429 (Rate Limit Exceeded / Quota Exhausted), the server catches the status, immediately switches the active owner provider session to `PROD_GEMINI_API_KEY_PRO`, and replays or continues the agent turn seamlessly.
-- **Cooldown & Reset:** The failover state remains active for the remainder of the session or until a backoff period resets (default: 60 minutes), after which the system probes `PROD_GEMINI_API_KEY_FREE` again.
+### 3. Failover Execution & Process State Tracking
+- **Failover Trigger:** Only an owner agent currently using `owner_free` may activate failover after HTTP 429 (Rate Limit Exceeded / Quota Exhausted). When the Pro key is configured, retry that same turn once with `owner_pro`; if the retry fails, use the normal offline-resilience response. Guest agents never trigger or consume owner failover state.
+- **Cooldown & Reset:** Owner failover state is process-wide and remains active for 60 minutes. During that period, new owner requests resolve to `owner_pro`; guest requests continue to resolve only the isolated guest key. After cooldown, owner requests may use `owner_free` again.
 - **Telemetry Exposure:** The resolved tier name (`development`, `owner_free`, `owner_pro`, `guest`, `none`) and failover status are exposed to the client via `/api/health` and conversational responses, allowing the UI to render appropriate telemetry badges without ever leaking raw tokens.
 
 ## Perimeter Architecture (Zero Trust Edge)

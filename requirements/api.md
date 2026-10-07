@@ -67,7 +67,7 @@ For guest `GET /api/jobs`, public market filters (company, availability, missing
   - `POST /api/agent/conversations` creates an owner conversation.
   - `GET /api/agent/conversations` lists owner conversations; `GET /api/agent/conversations/:id` retrieves one.
   - `POST /api/agent/conversations/:id/messages` sends a persistent owner turn; `DELETE /api/agent/conversations/:id` deletes it.
-  - These routes require `role = 'owner'`, persist via the selected repository, and use owner Gemini key resolution/failover.
+  - These routes require `role = 'owner'`, persist via the selected repository, and use owner-only Gemini key resolution/failover. An `owner_free` HTTP 429 activates the process-wide Pro cooldown and retries the current turn once with `owner_pro` when configured.
   - Agent tools load candidate and resume context from repository-backed profile records.
 - **Guest Demo Chat (`POST /api/agent/guest-chat`):**
   - Open to `role = 'guest'` as the sole public API POST exception.
@@ -77,4 +77,4 @@ For guest `GET /api/jobs`, public market filters (company, availability, missing
   - No application-level guest rate/budget cap is required for the MVP; provider quota is the limit.
 - **AI Health & Provider Status:**
   - `GET /api/health` returns operational health and configured AI provider/tier telemetry without making billable probes.
-  - AI conversation turn responses include the resolved role/tier telemetry. Guest responses expose only guest-tier status and never use owner keys or owner conversation history.
+  - AI conversation turn responses include the resolved role/tier telemetry after any owner retry. Guest responses expose only guest-tier status; guest 429s never activate owner failover or use owner keys/history.
