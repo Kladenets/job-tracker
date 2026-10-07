@@ -2,6 +2,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { FileJobRepository } from "../../db/file-repository";
+import { PostgresJobRepository } from "../../db/postgres-repository";
 import { UnifiedJobPosting } from "../../types/job-posting";
 
 console.log("=== Running Applications, Profile, and Metrics Integration Tests ===");
@@ -103,13 +104,59 @@ async function runTests() {
   assert(updatedApp.stage_history.length === 2, "Stage history appended second transition");
   console.log("✓ Application stage advanced with audit timeline history");
 
+  const preparingAppId = "22222222-3333-4444-8555-666666666666";
+  const preparingCreatedAt = new Date().toISOString();
+  await repository.saveApplication({
+    id: preparingAppId,
+    job_posting_id: jobId,
+    status: "preparing",
+    applied_at: null,
+    created_at: preparingCreatedAt,
+    stage_history: [],
+  });
+
   // Test 5: Metrics computation
   const metrics = await repository.getMetrics();
   assert(metrics.funnel.discoveredCount >= 1, "Discovered count positive");
   assert(metrics.funnel.savedCount >= 1, "Saved count positive");
-  assert(metrics.applications.appliedCount >= 1, "Applied count positive");
+  assert.strictEqual(metrics.applications.appliedCount, 1, "Preparing applications are excluded from submitted count");
   assert(metrics.applications.interviewCount >= 1, "Interview count positive");
   assert(metrics.applications.isSmallSample === true, "Sample size guard flags N < 10");
+  assert.strictEqual(metrics.sources.greenhouse.applied, 1);
+  assert.strictEqual(metrics.sources.greenhouse.callbackCount, 1);
+  assert.strictEqual(metrics.sources.greenhouse.callbackRate, 100);
+
+  const postgresRepository = new PostgresJobRepository({
+    query: async (query: string) => ({
+      rows: query.includes("FROM job_postings")
+        ? [{
+            id: testJob.id,
+            source: testJob.source,
+            job_status: testJob.job_status,
+            jev_fit: testJob.jev_fit,
+            date_discovered: new Date(testJob.date_discovered),
+            created_at: new Date(testJob.created_at),
+          }]
+        : [
+            {
+              id: updatedApp.id,
+              job_posting_id: updatedApp.job_posting_id,
+              status: updatedApp.status,
+              applied_at: new Date(updatedApp.applied_at),
+              created_at: new Date(updatedApp.created_at),
+            },
+            {
+              id: preparingAppId,
+              job_posting_id: jobId,
+              status: "preparing",
+              applied_at: null,
+              created_at: new Date(preparingCreatedAt),
+            },
+          ],
+    }),
+  } as any);
+  const postgresMetrics = await postgresRepository.getMetrics();
+  assert.deepStrictEqual(postgresMetrics, metrics, "PostgreSQL and file repositories must return the same metrics contract");
   console.log("✓ Dashboard metrics computed correctly with sample size guards");
 
   console.log("\n==========================================================");

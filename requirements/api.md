@@ -21,10 +21,10 @@ Supports Page 4 (Metrics & Funnel Dashboard):
 - `GET /api/dashboard/metrics?startDate=...&endDate=...`:
   Returns structured discovery and conversion metrics:
   - Discovery funnel: `discoveredCount`, `filteredOutCount`, `recommendedCount`, `savedCount`, `dismissedCount`.
-  - Application conversion: `appliedCount`, `recruiterScreenCount`, `interviewCount`, `offerCount`, `rejectedCount`.
-  - Rates with explicit formulas: `recruiterScreenRate`, `interviewRate`, `offerRate`, `rejectionRate`.
+  - Application conversion: `appliedCount` counts submitted applications and excludes `preparing`; `recruiterScreenCount`, `interviewCount`, `offerCount`, and `rejectedCount` use the same date range.
+  - Rates use `appliedCount` (submitted applications) as the denominator: `recruiterScreenRate`, `interviewRate`, `offerRate`, `rejectionRate`.
   - Sample size flags: `isSmallSample` boolean (`true` if `appliedCount < 10`).
-  - Source effectiveness breakdown: counts grouped by `source`.
+  - Source effectiveness breakdown returns `discovered`, `recommended`, `applied`, `callbackCount`, and `callbackRate` for each source. `applied` excludes `preparing`; callbacks are applications at `recruiter_screen` or a later positive stage. File and PostgreSQL repositories return the same shape.
 
 ### 2.3 Candidate Profile & Structured Resume (`/api/candidate-profile`)
 Supports Page 5 (Setup & Profiles):

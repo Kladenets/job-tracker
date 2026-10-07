@@ -1,5 +1,6 @@
 import { UnifiedJobPosting } from "../types/job-posting";
 import { Conversation } from "../ai/agent/conversation";
+import { DashboardMetrics, MetricsOptions } from "./metrics";
 
 export interface ExistingJobMatch {
   id: string;
@@ -63,7 +64,7 @@ export interface JobPostingRepository {
   deleteApplication(id: string): Promise<void>;
 
   // Discovery Run & Metrics Querying
-  getMetrics(options?: { startDate?: string; endDate?: string }): Promise<any>;
+  getMetrics(options?: MetricsOptions): Promise<DashboardMetrics>;
 
   // User Profile, Search Profile & Resume Persistence
   saveUserProfile(key: string, data: any): Promise<void>;

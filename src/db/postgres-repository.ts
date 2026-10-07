@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { UnifiedJobPosting } from "../types/job-posting";
 import { JobPostingRepository, ExistingJobMatch } from "./repository-interface";
+import { calculateDashboardMetrics } from "./metrics";
 import { Conversation, StoredConversation } from "../ai/agent/conversation";
 
 export class PostgresJobRepository implements JobPostingRepository {
@@ -456,82 +457,11 @@ export class PostgresJobRepository implements JobPostingRepository {
   }
 
   // Discovery Run & Metrics Querying
-  async getMetrics(options?: { startDate?: string; endDate?: string }): Promise<any> {
+  async getMetrics(options?: { startDate?: string; endDate?: string }) {
     const postRes = await this.pool.query("SELECT id, source, job_status, jev_fit, date_discovered, created_at FROM job_postings");
-    const appRes = await this.pool.query("SELECT id, status, applied_at, created_at FROM applications");
+    const appRes = await this.pool.query("SELECT id, job_posting_id, status, applied_at, created_at FROM applications");
 
-    const start = options?.startDate ? new Date(options.startDate).getTime() : 0;
-    const end = options?.endDate ? new Date(options.endDate).getTime() : Date.now();
-
-    const filteredPostings = postRes.rows.filter((p: any) => {
-      const t = new Date(p.date_discovered || p.created_at).getTime();
-      return t >= start && t <= end;
-    });
-
-    const filteredApps = appRes.rows.filter((a: any) => {
-      const t = new Date(a.applied_at || a.created_at).getTime();
-      return t >= start && t <= end;
-    });
-
-    const discoveredCount = filteredPostings.length;
-    const filteredOutCount = filteredPostings.filter((p: any) => p.job_status === "filtered_out").length;
-    const recommendedCount = filteredPostings.filter((p: any) => p.job_status === "recommended" || p.jev_fit === true).length;
-    const savedCount = filteredPostings.filter((p: any) => p.job_status === "saved" || p.job_status === "reviewing").length;
-    const dismissedCount = filteredPostings.filter((p: any) => p.job_status === "dismissed").length;
-
-    const appliedCount = filteredApps.length;
-    const recruiterScreenCount = filteredApps.filter((a: any) =>
-      ["recruiter_screen", "interviewing", "assessment", "offer", "accepted"].includes(a.status)
-    ).length;
-    const interviewCount = filteredApps.filter((a: any) =>
-      ["interviewing", "assessment", "offer", "accepted"].includes(a.status)
-    ).length;
-    const offerCount = filteredApps.filter((a: any) => ["offer", "accepted"].includes(a.status)).length;
-    const rejectedCount = filteredApps.filter((a: any) => a.status === "rejected").length;
-
-    const recruiterScreenRate = appliedCount > 0 ? Math.round((recruiterScreenCount / appliedCount) * 100) : 0;
-    const interviewRate = appliedCount > 0 ? Math.round((interviewCount / appliedCount) * 100) : 0;
-    const offerRate = appliedCount > 0 ? Math.round((offerCount / appliedCount) * 100) : 0;
-    const rejectionRate = appliedCount > 0 ? Math.round((rejectedCount / appliedCount) * 100) : 0;
-
-    const sources: Record<string, { discovered: number; recommended: number; applied: number }> = {};
-    for (const p of filteredPostings) {
-      if (!sources[p.source]) {
-        sources[p.source] = { discovered: 0, recommended: 0, applied: 0 };
-      }
-      sources[p.source].discovered += 1;
-      if (p.job_status === "recommended" || p.jev_fit === true) {
-        sources[p.source].recommended += 1;
-      }
-    }
-
-    return {
-      dateRange: {
-        startDate: options?.startDate || null,
-        endDate: options?.endDate || null,
-      },
-      funnel: {
-        discoveredCount,
-        filteredOutCount,
-        recommendedCount,
-        savedCount,
-        dismissedCount,
-      },
-      applications: {
-        appliedCount,
-        recruiterScreenCount,
-        interviewCount,
-        offerCount,
-        rejectedCount,
-        recruiterScreenRate,
-        interviewRate,
-        offerRate,
-        rejectionRate,
-        isSmallSample: appliedCount < 10,
-        sampleSizeWarning: appliedCount < 10 ? "Early signal: N < 10 applications" : null,
-      },
-      sources,
-    };
+    return calculateDashboardMetrics(postRes.rows, appRes.rows, options);
   }
 
   async saveUserProfile(key: string, data: any): Promise<void> {
