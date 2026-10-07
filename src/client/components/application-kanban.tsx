@@ -2,23 +2,15 @@ import React from "react";
 import { Application, ApplicationStatus, UnifiedJobPosting } from "../../types/job-posting";
 import { ApplicationCard } from "./application-card";
 import { Plus } from "lucide-react";
+import {
+  APPLICATION_STAGE_DEFINITIONS,
+  ARCHIVED_APPLICATION_STATUSES,
+  ApplicationStageDefinition,
+} from "./application-stages";
 
-export interface KanbanColumnDef {
-  id: ApplicationStatus;
-  title: string;
-  badgeColor: string;
-}
+export type KanbanColumnDef = ApplicationStageDefinition;
 
-export const KANBAN_COLUMNS: KanbanColumnDef[] = [
-  { id: "preparing", title: "Preparing", badgeColor: "bg-slate-400" },
-  { id: "applied", title: "Applied", badgeColor: "bg-blue-500" },
-  { id: "recruiter_screen", title: "Recruiter Screen", badgeColor: "bg-amber-500" },
-  { id: "interviewing", title: "Interviewing", badgeColor: "bg-purple-500" },
-  { id: "assessment", title: "Assessment", badgeColor: "bg-indigo-500" },
-  { id: "offer", title: "Offer", badgeColor: "bg-emerald-500" },
-  { id: "rejected", title: "Rejected", badgeColor: "bg-rose-500" },
-  { id: "withdrawn", title: "Archived / Withdrawn", badgeColor: "bg-zinc-500" },
-];
+export const KANBAN_COLUMNS = APPLICATION_STAGE_DEFINITIONS;
 
 interface ApplicationKanbanProps {
   applications: Application[];
@@ -61,14 +53,9 @@ export function ApplicationKanban({
   // Filter columns based on segment: Active pipeline vs Archived
   const visibleColumns = React.useMemo(() => {
     if (activeSegment === "archived") {
-      return KANBAN_COLUMNS.filter((c) =>
-        ["offer", "rejected", "withdrawn"].includes(c.id)
-      );
+      return KANBAN_COLUMNS.filter((column) => ARCHIVED_APPLICATION_STATUSES.has(column.id));
     }
-    // "active" or default: active stages
-    return KANBAN_COLUMNS.filter(
-      (c) => !["rejected", "withdrawn"].includes(c.id)
-    );
+    return KANBAN_COLUMNS.filter((column) => !ARCHIVED_APPLICATION_STATUSES.has(column.id));
   }, [activeSegment]);
 
   const handleDragStart = (e: React.DragEvent, appId: string) => {
@@ -122,7 +109,7 @@ export function ApplicationKanban({
               <div className="flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${col.badgeColor}`} />
                 <h3 className="text-xs font-bold text-[var(--text-primary)]">
-                  {col.title}
+                  {col.label}
                 </h3>
               </div>
               <span className="text-[11px] font-mono-tabular font-bold px-2 py-0.5 rounded-full bg-[var(--surface-sunken)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">

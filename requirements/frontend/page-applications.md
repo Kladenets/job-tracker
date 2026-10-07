@@ -10,9 +10,13 @@
   3. `recruiter_screen` (Initial Recruiter Call Scheduled/Completed)
   4. `interviewing` (Technical / Team Interviews)
   5. `assessment` (Take-home or Coding Test)
-  6. `offer` (Offer Received)
-  7. `rejected` (Company Rejection)
-  8. `withdrawn` / `inactive` (Archived)
+  6. `offer` (Offer Received; remains in the active pipeline)
+  7. `accepted` (Offer Accepted; archived)
+  8. `rejected` (Company Rejection; archived)
+  9. `withdrawn` (Candidate Withdrew; archived)
+  10. `inactive` (No Longer Active; archived)
+- The stage selector in the application details drawer must expose all ten lifecycle stages.
+- The `Active` and `Archived` segments are disjoint: `accepted`, `rejected`, `withdrawn`, and `inactive` are archived; all other stages, including `offer`, are active.
 - **Spring Animations:** Cards moving between stages use React Motion spring physics (`stiffness: 220, damping: 24`) for fluid column transitions.
 - **In-Page Sticky Filter Bar:** Quick search (`/`), stage filter segment (`Active` | `Archived`), and sorting.
 

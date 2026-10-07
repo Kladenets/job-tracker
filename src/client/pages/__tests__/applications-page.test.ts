@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { Application, ApplicationStatus, ApplicationStatusSchema } from "../../../types/job-posting";
+import {
+  APPLICATION_STAGE_DEFINITIONS,
+  ARCHIVED_APPLICATION_STATUSES,
+} from "../../components/application-stages";
 
 console.log("Running Application Tracking Board Unit Tests (Chunk 5)...");
 
@@ -24,6 +28,14 @@ for (const stage of requiredStages) {
   assert.ok(result.success, `Application stage '${stage}' must be valid under ApplicationStatusSchema`);
 }
 console.log("  ✔ All 10 lifecycle stages validated against ApplicationStatusSchema");
+
+assert.deepStrictEqual(
+  APPLICATION_STAGE_DEFINITIONS.map((stage) => stage.id).sort(),
+  [...ApplicationStatusSchema.options].sort(),
+  "Kanban and drawer stage definitions must cover every valid application status exactly once"
+);
+assert.strictEqual(new Set(APPLICATION_STAGE_DEFINITIONS.map((stage) => stage.id)).size, 10);
+console.log("  ✔ Kanban and drawer expose all 10 lifecycle stages");
 
 // ====================================================================
 // Test 2: Next Action Deadline Urgency Calculation
@@ -119,17 +131,29 @@ const testApplications: Application[] = [
 ];
 
 // Active segment filter should exclude rejected/withdrawn
-const activeApps = testApplications.filter((a) => !["rejected", "withdrawn"].includes(a.status));
-assert.strictEqual(activeApps.length, 2, "Active filter must exclude rejected applications");
+const segmentTerminalStatuses: ApplicationStatus[] = ["accepted", "rejected", "withdrawn", "inactive"];
+const segmentApplications = [
+  ...testApplications,
+  ...segmentTerminalStatuses.filter((status) => !testApplications.some((app) => app.status === status)).map((status, index) => ({
+    ...testApplications[0],
+    id: `terminal-${index}`,
+    status,
+  })),
+  { ...testApplications[0], id: "active-offer", status: "offer" as const },
+];
+const activeApps = segmentApplications.filter((application) => !ARCHIVED_APPLICATION_STATUSES.has(application.status));
+assert.strictEqual(activeApps.length, 3, "Active filter must exclude terminal applications but retain offers");
 assert.ok(activeApps.some((a) => a.id === "app-1"));
 assert.ok(activeApps.some((a) => a.id === "app-2"));
+assert.ok(activeApps.some((application) => application.id === "active-offer"), "Offer remains in the active pipeline");
 
-// Archived segment filter should include rejected/withdrawn/offer
-const archivedApps = testApplications.filter((a) =>
-  ["rejected", "withdrawn", "offer", "accepted"].includes(a.status)
+const archivedApps = segmentApplications.filter((application) => ARCHIVED_APPLICATION_STATUSES.has(application.status));
+assert.strictEqual(archivedApps.length, 4, "Archived filter must include each terminal application stage");
+assert.deepStrictEqual(
+  new Set(archivedApps.map((application) => application.status)),
+  new Set(segmentTerminalStatuses)
 );
-assert.strictEqual(archivedApps.length, 1, "Archived filter must include rejected applications");
-assert.strictEqual(archivedApps[0].id, "app-3");
+assert.strictEqual(activeApps.some((application) => archivedApps.some((archived) => archived.id === application.id)), false);
 
 console.log("  ✔ Pipeline segment filtering (active vs archived) verified");
 

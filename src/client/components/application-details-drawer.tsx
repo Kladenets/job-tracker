@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Application, ApplicationStatus, UnifiedJobPosting } from "../../types/job-posting";
+import { APPLICATION_STAGE_DEFINITIONS } from "./application-stages";
 import {
   X,
   ExternalLink,
@@ -28,19 +29,6 @@ interface ApplicationDetailsDrawerProps {
   onDelete?: () => Promise<void>;
   isUpdating?: boolean;
 }
-
-const STAGES: { id: ApplicationStatus; label: string }[] = [
-  { id: "preparing", label: "Preparing" },
-  { id: "applied", label: "Applied" },
-  { id: "recruiter_screen", label: "Recruiter Screen" },
-  { id: "interviewing", label: "Interviewing" },
-  { id: "assessment", label: "Assessment" },
-  { id: "offer", label: "Offer" },
-  { id: "accepted", label: "Accepted" },
-  { id: "rejected", label: "Rejected" },
-  { id: "withdrawn", label: "Withdrawn" },
-  { id: "inactive", label: "Inactive" },
-];
 
 export function ApplicationDetailsDrawer({
   application,
@@ -127,7 +115,7 @@ export function ApplicationDetailsDrawer({
               Active Pipeline Stage
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {STAGES.slice(0, 8).map((stage) => {
+              {APPLICATION_STAGE_DEFINITIONS.map((stage) => {
                 const isActive = currentStatus === stage.id;
                 return (
                   <button
