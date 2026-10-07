@@ -9,7 +9,7 @@ import { JobSpyQuerySchema, RawJobPostingSchema, RawJobPosting } from "./types/j
 import { sourceRegistry } from "./adapters";
 import { GreenhouseAdapter } from "./adapters/greenhouse-adapter";
 import { LeverAdapter } from "./adapters/lever-adapter";
-import { getRepository } from "./db";
+import { getRepository, initializeRepository } from "./db";
 import { checkDatabaseConnection } from "./db/connection";
 import { runMigrations } from "./db/migrations/migrator";
 import { ingestRawPostings } from "./pipeline/ingestion-pipeline";
@@ -1305,6 +1305,8 @@ app.get("/api/sources/jobspy/test", async (req: Request, res: Response) => {
 
 if (require.main === module) {
   const startServer = async () => {
+    await initializeRepository();
+
     // If running in development with Vite or production with built static files
     const isProd = process.env.NODE_ENV === "production";
     const clientDistPath = path.join(process.cwd(), "dist", "client");
@@ -1335,7 +1337,11 @@ if (require.main === module) {
     });
   };
 
-  startServer();
+  startServer().catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Job Tracker Server] Startup failed: ${message}`);
+    process.exitCode = 1;
+  });
 }
 
 export default app;

@@ -68,9 +68,71 @@ function makeRequest(
 async function runApiTests() {
   const originalEnv = { ...process.env };
   const testDataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "job-tracker-api-"));
+
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = "";
+  delete process.env.JOB_TRACKER_FORCE_FILE;
+  const { initializeRepository, getRepository, selectRepository } = require("../../db");
+
+  const fakePostgresRepository = { kind: "postgres-test" };
+  const fakeFileRepository = { kind: "file-test" };
+  const fakePool = {};
+  const connectedDependencies = {
+    checkDatabaseConnection: async () => ({ connected: true, message: "test connection successful" }),
+    getDatabasePool: () => fakePool,
+    createFileRepository: () => fakeFileRepository,
+    createPostgresRepository: (pool: unknown) => {
+      assert.strictEqual(pool, fakePool);
+      return fakePostgresRepository;
+    },
+  };
+  const postgresSelection = await selectRepository(
+    { isProduction: true, forceFileRepository: false, databaseUrl: "postgres://test/db" },
+    connectedDependencies
+  );
+  assert.strictEqual(postgresSelection.engine, "postgres");
+  assert.strictEqual(postgresSelection.repository, fakePostgresRepository);
+
+  await assert.rejects(
+    selectRepository(
+      { isProduction: true, forceFileRepository: false, databaseUrl: "postgres://test/db" },
+      {
+        ...connectedDependencies,
+        checkDatabaseConnection: async () => ({ connected: false, message: "test database unavailable" }),
+        createFileRepository: () => {
+          throw new Error("Production must not use file storage");
+        },
+      }
+    ),
+    /PostgreSQL is required in production/
+  );
+
+  const forcedFileSelection = await selectRepository(
+    { isProduction: false, forceFileRepository: true, databaseUrl: "postgres://test/db" },
+    {
+      ...connectedDependencies,
+      createFileRepository: () => fakeFileRepository,
+    }
+  );
+  assert.strictEqual(forcedFileSelection.engine, "file");
+  assert.strictEqual(forcedFileSelection.repository, fakeFileRepository);
+
+  await assert.rejects(
+    initializeRepository(),
+    /DATABASE_URL is required in production/,
+    "Production must refuse file-store startup when PostgreSQL is not configured"
+  );
+  assert.throws(
+    () => getRepository(),
+    /Repository is not initialized/,
+    "Production requests must not lazily select file storage"
+  );
+
   process.env.NODE_ENV = "test";
   process.env.JOB_TRACKER_FORCE_FILE = "true";
   process.env.JOB_TRACKER_STORE_PATH = path.join(testDataDirectory, "job_tracker_store.json");
+  const initializedRepository = await initializeRepository();
+  assert.strictEqual(initializedRepository.engine, "file", "Test mode can explicitly initialize the isolated file repository");
   const app = require("../../server").default;
   // Start ephemeral test server on random port
   const testServer = http.createServer(app);

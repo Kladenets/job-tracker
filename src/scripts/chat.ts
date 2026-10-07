@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import { GeminiAgent, DEFAULT_GEMINI_MODEL } from "../ai/agent/gemini-agent";
 import { Conversation } from "../ai/agent/conversation";
 import { createDefaultTools } from "../ai/agent/tools";
-import { getRepository } from "../db";
+import { getRepository, initializeRepository } from "../db";
 
 dotenv.config();
 
@@ -15,6 +15,8 @@ dotenv.config();
  *      npm run agent:chat -- --conversation=<conv_id>
  */
 async function main() {
+  await initializeRepository();
+
   const args = process.argv.slice(2);
   const jobArg = args.find((a) => a.startsWith("--job="))?.split("=")[1];
   const convArg = args.find((a) => a.startsWith("--conversation="))?.split("=")[1];
