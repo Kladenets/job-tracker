@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { UnifiedJobPosting } from "../types/job-posting";
+import { Application, UnifiedJobPosting } from "../types/job-posting";
 import { JobPostingRepository, ExistingJobMatch } from "./repository-interface";
 import { calculateDashboardMetrics } from "./metrics";
 import { Conversation, StoredConversation } from "../ai/agent/conversation";
@@ -373,6 +373,57 @@ export class PostgresJobRepository implements JobPostingRepository {
   }
 
   // Application Tracking Methods
+  async createManualApplication(posting: UnifiedJobPosting, application: Application): Promise<Application> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO job_postings (
+          id, source, application_url, content_hash, title, company, description_text,
+          date_discovered, job_status, availability, workplace_type, employment_type,
+          seniority, currency, created_at, updated_at
+        ) VALUES ($1, 'manual', $2, $3, $4, $5, $6, $7, 'discovered', 'unknown',
+          'unknown', 'unknown', 'unknown', 'USD', $8, $9)`,
+        [
+          posting.id,
+          posting.application_url || null,
+          posting.content_hash,
+          posting.title,
+          posting.company,
+          posting.description_text,
+          posting.date_discovered,
+          posting.created_at,
+          posting.updated_at,
+        ]
+      );
+      await client.query(
+        `INSERT INTO applications (
+          id, job_posting_id, status, application_url, applied_at, next_action_date,
+          user_notes, stage_history, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          application.id,
+          application.job_posting_id,
+          application.status,
+          application.application_url || null,
+          application.applied_at ? new Date(application.applied_at) : null,
+          application.next_action_date ? new Date(application.next_action_date) : null,
+          application.user_notes || null,
+          JSON.stringify(application.stage_history || []),
+          application.created_at,
+          application.updated_at,
+        ]
+      );
+      await client.query("COMMIT");
+      return application;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async saveApplication(app: any): Promise<any> {
     const query = `
       INSERT INTO applications (

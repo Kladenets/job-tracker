@@ -1,4 +1,4 @@
-import { UnifiedJobPosting } from "../types/job-posting";
+import { Application, UnifiedJobPosting } from "../types/job-posting";
 import { Conversation } from "../ai/agent/conversation";
 import { DashboardMetrics, MetricsOptions } from "./metrics";
 
@@ -57,6 +57,7 @@ export interface JobPostingRepository {
   deleteConversation(id: string): Promise<void>;
 
   // Application Tracking Persistence
+  createManualApplication(posting: UnifiedJobPosting, application: Application): Promise<Application>;
   saveApplication(app: any): Promise<any>;
   getApplication(id: string): Promise<any | null>;
   getApplicationByJobId(jobId: string): Promise<any | null>;

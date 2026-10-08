@@ -33,18 +33,21 @@
   - Updates the application's current stage.
   - Automatically appends a new entry to `stage_history` with the timestamp and an optional user note modal.
   - Updates the parent job posting workflow status if appropriate.
+- **Applied Date Semantics:** `preparing` has no `applied_at`. When an application first enters any later stage, the server sets `applied_at` to the supplied date or current time if absent. Preserve that first-submission timestamp across subsequent stage changes; only a deliberate user edit may correct it.
 
 ### 1.4 Manual Application Creation
 - "Add Application" button modal:
   - Supports entering a manual application for unlisted or offline jobs.
   - Requires entering Company and Title (creates a minimal underlying job posting first to preserve relational integrity).
   - Optional fields: Application URL, Initial Stage, Applied Date, and Notes.
+  - Creating the minimal job posting and its application is one atomic operation; failure must leave neither record persisted. All ten application stages are available. The Applied Date control is disabled and omitted from the request for `preparing`.
 
 ### 1.5 Application Details Drawer
 - Clicking an application opens an editor drawer:
   - Editable `user_notes` field (markdown-supported for interview prep notes and salary discussion logs).
   - Next action deadline picker.
   - Timeline history showing when each stage was entered and associated notes.
+  - Deleting an application requires explicit confirmation and reports failure without closing the drawer.
 
 ### 1.6 Guest Mode Boundary & Access Restrictions
 - **Access Rule:** Strictly restricted to authenticated owner sessions (`role = 'owner'`).

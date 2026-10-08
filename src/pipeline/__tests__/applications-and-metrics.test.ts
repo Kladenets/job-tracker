@@ -159,6 +159,61 @@ async function runTests() {
   assert.deepStrictEqual(postgresMetrics, metrics, "PostgreSQL and file repositories must return the same metrics contract");
   console.log("✓ Dashboard metrics computed correctly with sample size guards");
 
+  const manualJob: UnifiedJobPosting = {
+    ...testJob,
+    id: "33333333-4444-4555-8666-777777777777",
+    source: "manual",
+    source_job_id: null,
+    source_url: null,
+    canonical_url: null,
+    application_url: "https://example.com/apply",
+    title: "Manual Role",
+    company: "Manual Co",
+    job_status: "discovered",
+    availability: "unknown",
+  };
+  const manualApplication = {
+    id: "44444444-5555-4666-8777-888888888888",
+    job_posting_id: manualJob.id,
+    status: "applied" as const,
+    application_url: manualJob.application_url,
+    applied_at: new Date().toISOString(),
+    next_action_date: null,
+    user_notes: null,
+    stage_history: [{ stage: "applied" as const, entered_at: new Date().toISOString() }],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const atomicResult = await repository.createManualApplication(manualJob, manualApplication);
+  assert.strictEqual(atomicResult.job_posting_id, manualJob.id);
+  assert.ok(await repository.getById(manualJob.id));
+  assert.ok(await repository.getApplication(manualApplication.id));
+  console.log("✓ File repository persists manual job and application together");
+
+  const transactionStatements: string[] = [];
+  const failingClient = {
+    query: async (query: string) => {
+      transactionStatements.push(query.trim().split(/\s+/).slice(0, 3).join(" ").toUpperCase());
+      if (query.includes("INSERT INTO applications")) throw new Error("simulated application insert failure");
+      return { rows: [] };
+    },
+    release: () => undefined,
+  };
+  const transactionRepository = new PostgresJobRepository({
+    connect: async () => failingClient,
+  } as any);
+  await assert.rejects(
+    transactionRepository.createManualApplication(manualJob, manualApplication),
+    /simulated application insert failure/
+  );
+  assert.deepStrictEqual(transactionStatements, [
+    "BEGIN",
+    "INSERT INTO JOB_POSTINGS",
+    "INSERT INTO APPLICATIONS",
+    "ROLLBACK",
+  ]);
+  console.log("✓ PostgreSQL manual application transaction rolls back both records on failure");
+
   console.log("\n==========================================================");
   console.log("  ALL APPLICATION & METRICS TESTS PASSED SUCCESSFULLY!    ");
   console.log("==========================================================\n");

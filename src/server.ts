@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
@@ -28,6 +28,7 @@ import {
 } from "./utils/resume-sync";
 import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch";
 import {
+  Application,
   ApplicationStatusSchema,
   JobWorkflowStatusSchema,
   UnifiedJobPosting,
@@ -790,6 +791,83 @@ app.get("/api/applications/:id", async (req: Request, res: Response) => {
   }
 });
 
+app.post("/api/applications/manual", async (req: Request, res: Response) => {
+  const requestSchema = z.object({
+    company: z.string().trim().min(1).max(255),
+    title: z.string().trim().min(1).max(512),
+    status: ApplicationStatusSchema.default("applied"),
+    application_url: z.string().url().optional(),
+    applied_at: z.string().datetime().optional(),
+    next_action_date: z.string().datetime().optional(),
+    user_notes: z.string().max(20000).optional(),
+  }).strict();
+  const parsed = requestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: "Invalid manual application", details: parsed.error.flatten() });
+  }
+
+  try {
+    const { repository } = getRepository();
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    const { company, title, status } = parsed.data;
+    const description = parsed.data.user_notes || `Direct application to ${company} for ${title}`;
+    const posting: UnifiedJobPosting = {
+      id,
+      source: "manual",
+      source_job_id: null,
+      source_url: null,
+      canonical_url: null,
+      application_url: parsed.data.application_url || null,
+      content_hash: createHash("sha256").update(`${title}\u0000${company}\u0000${description}`).digest("hex"),
+      title,
+      company,
+      location: null,
+      workplace_type: "unknown",
+      employment_type: "unknown",
+      seniority: "unknown",
+      salary_min_annual: null,
+      salary_max_annual: null,
+      currency: "USD",
+      interval: null,
+      raw_salary_text: null,
+      description_text: description,
+      date_posted: null,
+      date_discovered: now,
+      last_checked_at: null,
+      job_status: "discovered",
+      availability: "unknown",
+      availability_evidence: null,
+      jev_fit: null,
+      jev_confidence: null,
+      created_at: now,
+      updated_at: now,
+    };
+    const application: Application = {
+      id: randomUUID(),
+      job_posting_id: id,
+      status,
+      application_url: parsed.data.application_url || null,
+      applied_at: status === "preparing" ? null : (parsed.data.applied_at || now),
+      next_action_date: parsed.data.next_action_date || null,
+      user_notes: parsed.data.user_notes || null,
+      stage_history: [{
+        stage: status,
+        entered_at: now,
+        notes: parsed.data.user_notes || "Initial application created",
+      }],
+      created_at: now,
+      updated_at: now,
+    };
+
+    const saved = await repository.createManualApplication(posting, application);
+    return res.status(201).json({ success: true, application: saved });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to create manual application";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
 app.post("/api/applications", async (req: Request, res: Response) => {
   try {
     const { repository } = getRepository();
@@ -814,7 +892,7 @@ app.post("/api/applications", async (req: Request, res: Response) => {
       job_posting_id,
       status: initialStatus,
       application_url: application_url || job.application_url || job.canonical_url || null,
-      applied_at: initialStatus === "applied" ? (applied_at || now) : (applied_at || null),
+      applied_at: initialStatus === "preparing" ? null : (applied_at || now),
       next_action_date: next_action_date || null,
       user_notes: user_notes || null,
       stage_history: [
@@ -850,6 +928,7 @@ app.patch("/api/applications/:id", async (req: Request, res: Response) => {
     const now = new Date().toISOString();
     const stageHistory = [...(existing.stage_history || [])];
     const nextStatus = parsedStatus?.success ? parsedStatus.data : existing.status;
+    const appliedAt = existing.applied_at || (nextStatus === "preparing" ? null : now);
 
     if (parsedStatus?.success && parsedStatus.data !== existing.status) {
       stageHistory.push({
@@ -862,6 +941,7 @@ app.patch("/api/applications/:id", async (req: Request, res: Response) => {
     const updated = await repository.saveApplication({
       ...existing,
       status: nextStatus,
+      applied_at: appliedAt,
       next_action_date: next_action_date !== undefined ? next_action_date : existing.next_action_date,
       user_notes: user_notes !== undefined ? user_notes : existing.user_notes,
       application_url: application_url !== undefined ? application_url : existing.application_url,

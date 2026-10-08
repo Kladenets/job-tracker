@@ -24,9 +24,13 @@ const STAGE_OPTIONS: { id: ApplicationStatus; label: string }[] = [
   { id: "interviewing", label: "Technical / Team Interview" },
   { id: "assessment", label: "Assessment / Take-Home" },
   { id: "offer", label: "Offer Received" },
+  { id: "accepted", label: "Offer Accepted" },
   { id: "rejected", label: "Rejected" },
-  { id: "withdrawn", label: "Withdrawn / Inactive" },
+  { id: "withdrawn", label: "Withdrawn" },
+  { id: "inactive", label: "Inactive" },
 ];
+
+const today = () => new Date().toISOString().slice(0, 10);
 
 export function AddApplicationModal({
   isOpen,
@@ -38,7 +42,7 @@ export function AddApplicationModal({
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<ApplicationStatus>("applied");
   const [applicationUrl, setApplicationUrl] = useState("");
-  const [appliedAt, setAppliedAt] = useState(new Date().toISOString().split("T")[0]);
+  const [appliedAt, setAppliedAt] = useState(today());
   const [nextActionDate, setNextActionDate] = useState("");
   const [userNotes, setUserNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -59,7 +63,7 @@ export function AddApplicationModal({
         title: title.trim(),
         status,
         application_url: applicationUrl.trim() || undefined,
-        applied_at: appliedAt ? new Date(appliedAt).toISOString() : undefined,
+        applied_at: status !== "preparing" && appliedAt ? new Date(appliedAt).toISOString() : undefined,
         next_action_date: nextActionDate ? new Date(nextActionDate).toISOString() : undefined,
         user_notes: userNotes.trim() || undefined,
       });
@@ -67,6 +71,7 @@ export function AddApplicationModal({
       setCompany("");
       setTitle("");
       setStatus("applied");
+      setAppliedAt(today());
       setApplicationUrl("");
       setNextActionDate("");
       setUserNotes("");
@@ -155,7 +160,12 @@ export function AddApplicationModal({
               </label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as ApplicationStatus)}
+                onChange={(e) => {
+                  const nextStatus = e.target.value as ApplicationStatus;
+                  setStatus(nextStatus);
+                  if (nextStatus === "preparing") setAppliedAt("");
+                  else if (!appliedAt) setAppliedAt(today());
+                }}
                 className="w-full h-8.5 px-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] transition-colors cursor-pointer"
               >
                 {STAGE_OPTIONS.map((opt) => (
@@ -175,8 +185,9 @@ export function AddApplicationModal({
               <input
                 type="date"
                 value={appliedAt}
+                disabled={status === "preparing"}
                 onChange={(e) => setAppliedAt(e.target.value)}
-                className="w-full h-8.5 px-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] transition-colors font-mono-tabular"
+                className="w-full h-8.5 px-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] transition-colors font-mono-tabular disabled:opacity-50"
               />
             </div>
           </div>

@@ -5,6 +5,7 @@ import { ApplicationKanban } from "../components/application-kanban";
 import { ApplicationTable } from "../components/application-table";
 import { ApplicationDetailsDrawer } from "../components/application-details-drawer";
 import { AddApplicationModal } from "../components/add-application-modal";
+import { isApplicationInSegment } from "../components/application-stages";
 import { useAIDockStore } from "../shell/ai-dock-store";
 import { useShellStore } from "../shell/shell-store";
 import { Application, ApplicationStatus, UnifiedJobPosting } from "../../types/job-posting";
@@ -159,42 +160,13 @@ export function ApplicationsPage() {
       next_action_date?: string;
       user_notes?: string;
     }) => {
-      // First create minimal underlying job posting to preserve relational integrity
-      const jobRes = await fetch("/api/jobs/manual", {
+      const res = await fetch("/api/applications/manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: data.title,
-          company: data.company,
-          job_url_direct: data.application_url,
-          description: data.user_notes || `Direct application to ${data.company} for ${data.title}`,
-        }),
+        body: JSON.stringify(data),
       });
-
-      if (!jobRes.ok) throw new Error("Failed to register job posting relation");
-      const jobJson = await jobRes.json();
-      const createdJobId = jobJson.result?.items?.[0]?.id;
-
-      if (!createdJobId) {
-        throw new Error("Failed to extract created job ID");
-      }
-
-      // Second create the application record referencing the job
-      const appRes = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          job_posting_id: createdJobId,
-          status: data.status,
-          application_url: data.application_url,
-          applied_at: data.applied_at,
-          next_action_date: data.next_action_date,
-          user_notes: data.user_notes,
-        }),
-      });
-
-      if (!appRes.ok) throw new Error("Failed to create application record");
-      return appRes.json();
+      if (!res.ok) throw new Error("Failed to create manual application");
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -239,9 +211,9 @@ export function ApplicationsPage() {
 
       // Stage segment match
       if (segment === "active") {
-        if (["rejected", "withdrawn"].includes(app.status)) return false;
+        if (!isApplicationInSegment(app.status, "active")) return false;
       } else if (segment === "archived") {
-        if (!["rejected", "withdrawn", "offer", "accepted"].includes(app.status)) return false;
+        if (!isApplicationInSegment(app.status, "archived")) return false;
       }
 
       return true;
@@ -334,9 +306,9 @@ export function ApplicationsPage() {
         activeSegment={segment}
         onSegmentChange={setSegment}
         segments={[
-          { id: "active", label: "Active Pipeline", count: allApplications.filter(a => !["rejected", "withdrawn"].includes(a.status)).length },
+          { id: "active", label: "Active Pipeline", count: allApplications.filter(a => isApplicationInSegment(a.status, "active")).length },
           { id: "all", label: "All Stages", count: allApplications.length },
-          { id: "archived", label: "Archived & Offers", count: allApplications.filter(a => ["rejected", "withdrawn", "offer", "accepted"].includes(a.status)).length },
+          { id: "archived", label: "Archived", count: allApplications.filter(a => isApplicationInSegment(a.status, "archived")).length },
         ]}
         sortValue={sort}
         onSortChange={setSort}

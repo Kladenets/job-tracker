@@ -25,3 +25,12 @@ export const ARCHIVED_APPLICATION_STATUSES: ReadonlySet<ApplicationStatus> = new
   "withdrawn",
   "inactive",
 ]);
+
+export function isApplicationInSegment(
+  status: ApplicationStatus,
+  segment: "active" | "archived" | "all"
+): boolean {
+  if (segment === "all") return true;
+  const isArchived = ARCHIVED_APPLICATION_STATUSES.has(status);
+  return segment === "archived" ? isArchived : !isArchived;
+}

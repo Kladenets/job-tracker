@@ -130,6 +130,8 @@ The application must retain:
 - created and updated timestamps;
 - extensible application data for fields discovered while application assistance is developed.
 
+`applied_at` is null while status is `preparing`. The first transition to any non-`preparing` stage sets it to the supplied submission date or current time if absent; later stage transitions preserve it unless the owner explicitly corrects the date. Creating a manual application and its minimal posting is atomic: either both records persist or neither does.
+
 The MVP allows at most one application per posting. This constraint may be relaxed if a real reapplication workflow requires it.
 
 Application statuses are:

@@ -264,7 +264,11 @@ export function ApplicationDetailsDrawer({
           {onDelete ? (
             <button
               type="button"
-              onClick={onDelete}
+              onClick={() => {
+                if (window.confirm("Delete this application? This cannot be undone.")) {
+                  void onDelete();
+                }
+              }}
               className="px-3 py-1.5 rounded-md text-xs font-semibold text-[var(--status-danger-fg)] hover:bg-[var(--status-danger-bg)] border border-transparent hover:border-[var(--status-danger-fg)]/20 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <Trash2 className="h-3.5 w-3.5" />

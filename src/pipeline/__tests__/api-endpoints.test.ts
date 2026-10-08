@@ -461,6 +461,43 @@ async function runApiTests() {
     assert.strictEqual(createdApp.status, "applied", "Application stage is applied");
     console.log(`✓ POST /api/applications created application ${createdApp.id}`);
 
+    const preparingManualRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/applications/manual",
+      body: {
+        company: "Manual Prep Co",
+        title: "Preparing Role",
+        status: "preparing",
+      },
+    });
+    assert.strictEqual(preparingManualRes.statusCode, 201);
+    const preparingManualApp = preparingManualRes.body.application;
+    assert.strictEqual(preparingManualApp.status, "preparing");
+    assert.strictEqual(preparingManualApp.applied_at, null, "Preparing application must not have an applied date");
+    const preparingJobRes = await makeRequest(testServer, {
+      method: "GET",
+      path: `/api/jobs/${preparingManualApp.job_posting_id}`,
+    });
+    assert.strictEqual(preparingJobRes.statusCode, 200, "Atomic manual application must include its related job");
+
+    const markAppliedRes = await makeRequest(testServer, {
+      method: "PATCH",
+      path: `/api/applications/${preparingManualApp.id}`,
+      body: { status: "applied" },
+    });
+    assert.strictEqual(markAppliedRes.statusCode, 200);
+    const firstAppliedAt = markAppliedRes.body.application.applied_at;
+    assert.ok(firstAppliedAt, "First transition out of preparing must set applied_at");
+
+    const advanceAfterApplyRes = await makeRequest(testServer, {
+      method: "PATCH",
+      path: `/api/applications/${preparingManualApp.id}`,
+      body: { status: "recruiter_screen" },
+    });
+    assert.strictEqual(advanceAfterApplyRes.statusCode, 200);
+    assert.strictEqual(advanceAfterApplyRes.body.application.applied_at, firstAppliedAt, "Later stages preserve first submission date");
+    console.log("✓ Manual application creation is atomic and applied_at is set/preserved by stage transitions");
+
     // 6. Test GET /api/applications (with joined job metadata)
     console.log("[Test 6] Testing GET /api/applications...");
     const listAppsRes = await makeRequest(testServer, {

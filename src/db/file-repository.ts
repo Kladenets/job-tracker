@@ -1,4 +1,4 @@
-import { UnifiedJobPosting } from "../types/job-posting";
+import { Application, UnifiedJobPosting } from "../types/job-posting";
 import { JobPostingRepository, ExistingJobMatch } from "./repository-interface";
 import { calculateDashboardMetrics } from "./metrics";
 import { Conversation, StoredConversation } from "../ai/agent/conversation";
@@ -281,6 +281,19 @@ export class FileJobRepository implements JobPostingRepository {
   }
 
   // Application Tracking Methods
+  async createManualApplication(posting: UnifiedJobPosting, application: Application): Promise<Application> {
+    const now = new Date().toISOString();
+    const savedApplication: Application = {
+      ...application,
+      created_at: application.created_at || now,
+      updated_at: now,
+    };
+    this.postings.set(posting.id, posting);
+    this.applications.set(savedApplication.id, savedApplication);
+    this.saveToDisk();
+    return savedApplication;
+  }
+
   async saveApplication(app: any): Promise<any> {
     const existing = this.applications.get(app.id);
     const now = new Date().toISOString();

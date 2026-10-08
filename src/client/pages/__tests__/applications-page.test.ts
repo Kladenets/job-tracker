@@ -3,6 +3,7 @@ import { Application, ApplicationStatus, ApplicationStatusSchema } from "../../.
 import {
   APPLICATION_STAGE_DEFINITIONS,
   ARCHIVED_APPLICATION_STATUSES,
+  isApplicationInSegment,
 } from "../../components/application-stages";
 
 console.log("Running Application Tracking Board Unit Tests (Chunk 5)...");
@@ -141,19 +142,27 @@ const segmentApplications = [
   })),
   { ...testApplications[0], id: "active-offer", status: "offer" as const },
 ];
-const activeApps = segmentApplications.filter((application) => !ARCHIVED_APPLICATION_STATUSES.has(application.status));
+const activeApps = segmentApplications.filter((application) => isApplicationInSegment(application.status, "active"));
 assert.strictEqual(activeApps.length, 3, "Active filter must exclude terminal applications but retain offers");
 assert.ok(activeApps.some((a) => a.id === "app-1"));
 assert.ok(activeApps.some((a) => a.id === "app-2"));
 assert.ok(activeApps.some((application) => application.id === "active-offer"), "Offer remains in the active pipeline");
 
-const archivedApps = segmentApplications.filter((application) => ARCHIVED_APPLICATION_STATUSES.has(application.status));
+const archivedApps = segmentApplications.filter((application) => isApplicationInSegment(application.status, "archived"));
 assert.strictEqual(archivedApps.length, 4, "Archived filter must include each terminal application stage");
 assert.deepStrictEqual(
   new Set(archivedApps.map((application) => application.status)),
   new Set(segmentTerminalStatuses)
 );
 assert.strictEqual(activeApps.some((application) => archivedApps.some((archived) => archived.id === application.id)), false);
+assert.strictEqual(
+  segmentApplications.every((application) =>
+    isApplicationInSegment(application.status, "active") !==
+    isApplicationInSegment(application.status, "archived")
+  ),
+  true,
+  "Every stage must belong to exactly one of Active or Archived"
+);
 
 console.log("  ✔ Pipeline segment filtering (active vs archived) verified");
 
