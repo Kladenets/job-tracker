@@ -16,8 +16,9 @@ assert.ok(routePaths.includes("/inbox"), "Router must have '/inbox' route");
 assert.ok(routePaths.includes("/applications"), "Router must have '/applications' route");
 assert.ok(routePaths.includes("/dashboard"), "Router must have '/dashboard' route");
 assert.ok(routePaths.includes("/setup"), "Router must have '/setup' route");
+assert.ok(routePaths.includes("/jobs/$id"), "Router must have '/jobs/:id' detail route");
 
-console.log("  ✔ All 5 required application routes correctly configured in TanStack Router");
+console.log("  ✔ All required application routes correctly configured in TanStack Router");
 
 // ====================================================================
 // Test 2: Shell State & Ergonomics (Collapse & Role Scoping)

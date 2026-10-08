@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Sparkles,
   ExternalLink,
@@ -106,7 +107,14 @@ export function JobCard({
               {/* Job Title and Company */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <h2 className="font-bold text-xs md:text-sm text-[var(--text-primary)] tracking-tight truncate max-w-full">
-                  {job.title}
+                  <Link
+                    to="/jobs/$id"
+                    params={{ id: job.id }}
+                    onClick={(event) => event.stopPropagation()}
+                    className="hover:text-[var(--border-focus)] hover:underline"
+                  >
+                    {job.title}
+                  </Link>
                 </h2>
                 <span className="text-xs font-semibold text-[var(--text-secondary)]">
                   · {job.company}

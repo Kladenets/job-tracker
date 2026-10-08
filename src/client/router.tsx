@@ -9,6 +9,7 @@ import { InboxPage } from "./pages/inbox-page";
 import { ApplicationsPage } from "./pages/applications-page";
 import { DashboardPage } from "./pages/dashboard-page";
 import { SetupPage } from "./pages/setup-page";
+import { JobDetailPage } from "./pages/job-detail-page";
 
 // 1. Root route housing persistent shell (left rail, outlet, mobile bar)
 const rootRoute = createRootRoute({
@@ -52,6 +53,13 @@ const setupRoute = createRoute({
   component: SetupPage,
 });
 
+// 7. Job detail route
+const jobDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/jobs/$id",
+  component: JobDetailPage,
+});
+
 // 7. Route tree aggregation
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -59,6 +67,7 @@ const routeTree = rootRoute.addChildren([
   applicationsRoute,
   dashboardRoute,
   setupRoute,
+  jobDetailRoute,
 ]);
 
 // 8. Create typed router instance

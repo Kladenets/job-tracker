@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "@tanstack/react-router";
 import { Application, ApplicationStatus, UnifiedJobPosting } from "../../types/job-posting";
 import {
   Building2,
@@ -103,7 +104,16 @@ export function ApplicationCard({
             <span className="truncate">{job?.company || "Company"}</span>
           </div>
           <h4 className="text-xs font-bold text-[var(--text-primary)] group-hover:text-[var(--border-focus)] transition-colors truncate">
-            {job?.title || "Role Title"}
+            {job ? (
+              <Link
+                to="/jobs/$id"
+                params={{ id: job.id }}
+                onClick={(event) => event.stopPropagation()}
+                className="hover:underline"
+              >
+                {job.title}
+              </Link>
+            ) : "Role Title"}
           </h4>
         </div>
 
