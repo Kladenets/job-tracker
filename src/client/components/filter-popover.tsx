@@ -1,12 +1,8 @@
 import React from "react";
 import { Filter, X, Check } from "lucide-react";
+import { InboxFilterCriteria } from "../inbox-filtering";
 
-export interface FilterCriteria {
-  workplaceType: "all" | "remote" | "hybrid" | "onsite";
-  source: string;
-  missingSalary: boolean;
-  missingLocation: boolean;
-}
+export type FilterCriteria = InboxFilterCriteria;
 
 interface FilterPopoverProps {
   criteria: FilterCriteria;

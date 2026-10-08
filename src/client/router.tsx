@@ -10,6 +10,17 @@ import { ApplicationsPage } from "./pages/applications-page";
 import { DashboardPage } from "./pages/dashboard-page";
 import { SetupPage } from "./pages/setup-page";
 import { JobDetailPage } from "./pages/job-detail-page";
+import { z } from "zod";
+
+const inboxSearchSchema = z.object({
+  q: z.string().max(200).catch(""),
+  segment: z.enum(["all", "recommended", "marginal", "saved", "dismissed", "hidden"]).catch("all"),
+  sort: z.enum(["fit_desc", "date_desc", "salary_desc"]).catch("fit_desc"),
+  workplaceType: z.enum(["all", "remote", "hybrid", "onsite"]).catch("all"),
+  source: z.string().max(120).catch("all"),
+  missingSalary: z.preprocess((value) => value === true || value === "true", z.boolean()).catch(false),
+  missingLocation: z.preprocess((value) => value === true || value === "true", z.boolean()).catch(false),
+});
 
 // 1. Root route housing persistent shell (left rail, outlet, mobile bar)
 const rootRoute = createRootRoute({
@@ -29,6 +40,7 @@ const indexRoute = createRoute({
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/inbox",
+  validateSearch: inboxSearchSchema,
   component: InboxPage,
 });
 

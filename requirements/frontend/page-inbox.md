@@ -15,7 +15,8 @@
 
 #### Tier 1: Collapsed Scan Row (~4rem / 64px height)
 - **Semantic Arc Percentage Ring:**
-  - 36px circular SVG arc ring displaying bold monospace fit percentage centered inside (`87%`).
+  - 36px circular SVG arc ring displays `ai_analysis.overall_fit_score` only. JEV confidence is a separate probability that its binary qualification classification is correct; it must never be substituted for a fit score or compared to fit-score thresholds.
+  - If no numeric fit score exists (including sanitized guest responses), display an explicit `Unscored` state. Never invent a fallback percentage. When available, show JEV qualification (`qualified`/`not qualified`) and JEV confidence as separate labeled values.
   - Semantic functional colors:
     - High Fit ($\ge 70\%$): `--status-recommended-fg` (accessible mint/emerald).
     - Marginal Fit ($40\% - 69\%$): `--status-marginal-fg` (accessible warm amber).
@@ -41,7 +42,7 @@
   - `j` / `k` (or `ArrowDown` / `ArrowUp`): Next / previous job focus.
   - `s`: Save job (optimistic UI update, advances to `saved`).
   - `x`: Dismiss job (spring exit animation off-axis, removes from queue).
-  - `a`: Trigger direct ATS link and queue application record.
+  - `a`: Open the direct application URL in a new tab. This does not submit an application, change job status, or create an application record. The user records an application separately after actually submitting it.
   - `Cmd+Z`: Undo last triage action (card springs back into position).
   - `c` or `Cmd+K`: Open AI Assistant dock focused on active job.
 - **Guest Mode Behavior:** In guest sessions, triage mutations (Save/Dismiss) display an informational badge (*"Demo mode: Actions are view-only"*).

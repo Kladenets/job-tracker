@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { UnifiedJobPosting } from "../../../types/job-posting";
+import { filterInboxJobs, getJobFitScore, sortInboxJobs } from "../../inbox-filtering";
 
 console.log("Running Recommendation Inbox & Job Cards Unit Tests (Chunk 4)...");
 
@@ -64,7 +65,7 @@ assert.strictEqual(
 console.log("  ✔ Zero-pill typography formatting verified");
 
 // ====================================================================
-// Test 3: Client-Side Filter & Sort Matrix (Including Dismissed Tab)
+// Test 3: Production filter and sort logic, including score-less jobs
 // ====================================================================
 const testJobs: Partial<UnifiedJobPosting>[] = [
   {
@@ -121,32 +122,75 @@ const testJobs: Partial<UnifiedJobPosting>[] = [
   },
 ];
 
-// Test Segment: High Fit (>= 70%) excludes dismissed
-const highFit = testJobs.filter((j) => (j.jev_confidence || 0) >= 0.7 && j.job_status !== "dismissed");
-assert.strictEqual(highFit.length, 2, "High fit segment must return active jobs with score >= 70%");
+function completeJob(overrides: Partial<UnifiedJobPosting>): UnifiedJobPosting {
+  return {
+    id: "00000000-0000-4000-8000-000000000099",
+    source: "greenhouse",
+    content_hash: "hash",
+    title: "Engineer",
+    company: "Example",
+    workplace_type: "unknown",
+    employment_type: "unknown",
+    seniority: "unknown",
+    currency: "USD",
+    description_text: "",
+    date_discovered: "2026-10-01T00:00:00Z",
+    job_status: "discovered",
+    availability: "unknown",
+    created_at: "2026-10-01T00:00:00Z",
+    updated_at: "2026-10-01T00:00:00Z",
+    ...overrides,
+  };
+}
 
-// Test Segment: Marginal (40% - 69%)
-const marginalFit = testJobs.filter((j) => (j.jev_confidence || 0) >= 0.4 && (j.jev_confidence || 0) < 0.7);
-assert.strictEqual(marginalFit.length, 1, "Marginal segment must return Datadog job");
+function analysis(
+  score: number,
+  recommendation: "recommend" | "consider",
+  confidence: number
+): NonNullable<UnifiedJobPosting["ai_analysis"]> {
+  return {
+    version: "1",
+    analyzed_at: "2026-10-01",
+    provider: "test",
+    model_id: "test",
+    prompt_version: "1",
+    profile_state_hash: "x",
+    overall_fit_score: score,
+    recommendation,
+    confidence,
+    matched_qualifications: [],
+    qualification_gaps: [],
+    compensation_assessment: "unknown",
+    concerns: [],
+    facts_requiring_verification: [],
+    suggested_resume_focus: [],
+    rationale: "fit",
+  };
+}
 
-// Test Segment: Dismissed Tab explicitly captures dismissed jobs
-const dismissedTab = testJobs.filter((j) => j.job_status === "dismissed");
-assert.strictEqual(dismissedTab.length, 1, "Dismissed tab must isolate dismissed roles");
-assert.strictEqual(dismissedTab[0].id, "job-3", "Dismissed tab must contain job-3");
+const productionFilterJobs = [
+  completeJob({ id: "high", title: "High fit", ai_analysis: analysis(87, "recommend", 0.55) }),
+  completeJob({ id: "marginal", title: "Marginal fit", job_status: "saved", ai_analysis: analysis(55, "consider", 0.92) }),
+  completeJob({ id: "dismissed-high", title: "Dismissed high", job_status: "dismissed", ai_analysis: analysis(95, "recommend", 0.99) }),
+  completeJob({ id: "filtered-marginal", title: "Filtered marginal", job_status: "filtered_out", ai_analysis: analysis(50, "consider", 0.88) }),
+  completeJob({ id: "unscored", title: "Unscored confidence", jev_fit: true, jev_confidence: 0.99 }),
+  completeJob({ id: "reviewing", title: "Reviewing", job_status: "reviewing" }),
+];
+const noExtraFilters = { workplaceType: "all" as const, source: "all", missingSalary: false, missingLocation: false };
 
-// Test Search Query
-const searchStripe = testJobs.filter((j) => j.title?.toLowerCase().includes("backend") || j.company?.toLowerCase().includes("stripe"));
-assert.strictEqual(searchStripe.length, 1, "Search for 'backend' must match Stripe role");
+assert.strictEqual(getJobFitScore(productionFilterJobs[4]), null, "JEV confidence is not a fit score");
+assert.deepStrictEqual(filterInboxJobs(productionFilterJobs, "recommended", "", noExtraFilters).map((job) => job.id), ["high"]);
+assert.deepStrictEqual(filterInboxJobs(productionFilterJobs, "marginal", "", noExtraFilters).map((job) => job.id), ["marginal"]);
+assert.deepStrictEqual(filterInboxJobs(productionFilterJobs, "dismissed", "", noExtraFilters).map((job) => job.id), ["dismissed-high"]);
+assert.deepStrictEqual(filterInboxJobs(productionFilterJobs, "hidden", "", noExtraFilters).map((job) => job.id).sort(), ["dismissed-high", "filtered-marginal"]);
+assert.deepStrictEqual(filterInboxJobs(productionFilterJobs, "saved", "", noExtraFilters).map((job) => job.id).sort(), ["marginal", "reviewing"]);
+assert.strictEqual(filterInboxJobs(productionFilterJobs, "all", "confidence", noExtraFilters)[0].id, "unscored");
+assert.ok(
+  sortInboxJobs(productionFilterJobs, "fit_desc").slice(-2).every((job) => getJobFitScore(job) === null),
+  "Unscored jobs must sort after jobs with a numeric fit score"
+);
 
-// Test Sort by Fit Desc
-const sortedByFit = [...testJobs].sort((a, b) => (b.jev_confidence || 0) - (a.jev_confidence || 0));
-assert.strictEqual(sortedByFit[0].id, "job-1", "Highest fit job must be job-1 (0.92)");
-
-// Test Sort by Salary Desc
-const sortedBySalary = [...testJobs].sort((a, b) => (b.salary_max_annual || 0) - (a.salary_max_annual || 0));
-assert.strictEqual(sortedBySalary[0].id, "job-4", "Highest salary job must be job-4 ($250k)");
-
-console.log("  ✔ Client-side filter & sort logic (including Dismissed tab) verified");
+console.log("  ✔ Production filter/sort logic excludes hidden jobs and keeps confidence distinct from fit");
 
 // ====================================================================
 // Test 4: Three Differentiated Empty States Logic

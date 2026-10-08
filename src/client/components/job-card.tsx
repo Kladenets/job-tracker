@@ -38,10 +38,7 @@ export function JobCard({
 }: JobCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Score calculation: overall_fit_score or jev_confidence * 100 or default 75
-  const fitScore =
-    job.ai_analysis?.overall_fit_score ??
-    (job.jev_confidence != null ? Math.round(job.jev_confidence * 100) : 50);
+  const fitScore = job.ai_analysis?.overall_fit_score ?? null;
 
   // Format salary
   const formatSalary = () => {
@@ -101,7 +98,13 @@ export function JobCard({
         <div className="flex flex-col @[600px]:flex-row @[600px]:items-center justify-between gap-3">
           {/* Left Block: Arc Percentage Ring + Title & Zero-Pill Typography */}
           <div className="flex items-start gap-3 min-w-0 flex-1">
-            <FitScoreArc score={fitScore} size={38} strokeWidth={3.5} />
+            {fitScore === null ? (
+              <span className="w-[38px] shrink-0 text-center text-[9px] font-semibold leading-tight text-[var(--text-muted)]" aria-label="Fit score unavailable">
+                Unscored
+              </span>
+            ) : (
+              <FitScoreArc score={fitScore} size={38} strokeWidth={3.5} />
+            )}
 
             <div className="min-w-0 flex-1 space-y-1">
               {/* Job Title and Company */}
@@ -127,6 +130,12 @@ export function JobCard({
                 {isDismissed && (
                   <span className="px-1.5 py-0.2 rounded bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)] border border-[var(--status-danger-fg)]/20 text-[10px] font-mono-tabular font-bold">
                     Dismissed
+                  </span>
+                )}
+                {job.jev_fit != null && (
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    {job.jev_fit ? "JEV qualified" : "JEV not qualified"}
+                    {job.jev_confidence != null && ` · ${Math.round(job.jev_confidence * 100)}% confidence`}
                   </span>
                 )}
               </div>

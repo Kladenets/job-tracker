@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
 import { JobCard } from "../components/job-card";
 import { InboxCardSkeleton } from "../components/inbox-card-skeleton";
@@ -9,6 +10,7 @@ import { FilterPopover, FilterCriteria } from "../components/filter-popover";
 import { useAIDockStore } from "../shell/ai-dock-store";
 import { useShellStore } from "../shell/shell-store";
 import { UnifiedJobPosting } from "../../types/job-posting";
+import { filterInboxJobs, InboxSegment, InboxSort, sortInboxJobs } from "../inbox-filtering";
 import { CheckCircle2, RotateCcw, AlertCircle, Sparkles } from "lucide-react";
 
 interface ToastNotification {
@@ -20,40 +22,64 @@ interface ToastNotification {
 
 export function InboxPage() {
   const queryClient = useQueryClient();
+  const routeSearch = useSearch({ from: "/inbox" });
+  const navigate = useNavigate({ from: "/inbox" });
   const { askAboutJob } = useAIDockStore();
   const { userRole } = useShellStore();
   const isGuest = userRole === "guest";
 
   // Filter & Search State
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [segment, setSegment] = useState<string>("all");
-  const [sort, setSort] = useState<string>("fit_desc");
+  const [search, setSearch] = useState(routeSearch.q);
+  const [debouncedSearch, setDebouncedSearch] = useState(routeSearch.q);
+  const segment = routeSearch.segment;
+  const sort = routeSearch.sort;
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Advanced Filter Criteria
-  const [filterCriteria, setFilterCriteria] = useState<FilterCriteria>({
-    workplaceType: "all",
-    source: "all",
-    missingSalary: false,
-    missingLocation: false,
-  });
+  const filterCriteria: FilterCriteria = {
+    workplaceType: routeSearch.workplaceType,
+    source: routeSearch.source,
+    missingSalary: routeSearch.missingSalary,
+    missingLocation: routeSearch.missingLocation,
+  };
 
   // History stack for undo (Cmd+Z)
   const [triageHistory, setTriageHistory] = useState<
     Array<{ job: UnifiedJobPosting; prevStatus: string }>
   >([]);
 
-  // 200ms debounce on search
+  // Keep the draft field in sync with browser back/forward and shared links.
+  useEffect(() => {
+    setSearch(routeSearch.q);
+    setDebouncedSearch(routeSearch.q);
+  }, [routeSearch.q]);
+
+  // 200ms debounce on search and replace, avoiding one history entry per keystroke.
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
+      if (search !== routeSearch.q) {
+        navigate({ search: (previous) => ({ ...previous, q: search }), replace: true });
+      }
     }, 200);
     return () => clearTimeout(handler);
-  }, [search]);
+  }, [search, routeSearch.q, navigate]);
+
+  const updateSearch = useCallback((updates: Partial<typeof routeSearch>, replace = false) => {
+    navigate({ search: (previous) => ({ ...previous, ...updates }), replace });
+  }, [navigate]);
+
+  const handleFilterCriteriaChange = useCallback((criteria: FilterCriteria) => {
+    updateSearch({
+      workplaceType: criteria.workplaceType,
+      source: criteria.source,
+      missingSalary: criteria.missingSalary,
+      missingLocation: criteria.missingLocation,
+    });
+  }, [updateSearch]);
 
   // Fetch jobs from server API
   const {
@@ -97,94 +123,13 @@ export function InboxPage() {
   }, [filterCriteria]);
 
   // Filter & Sort Logic
-  const filteredJobs = useMemo(() => {
-    return allJobs.filter((job) => {
-      // 1. Segment filter
-      if (segment === "recommended") {
-        const score =
-          job.ai_analysis?.overall_fit_score ??
-          (job.jev_confidence != null ? job.jev_confidence * 100 : 0);
-        if (score < 70) return false;
-      } else if (segment === "marginal") {
-        const score =
-          job.ai_analysis?.overall_fit_score ??
-          (job.jev_confidence != null ? job.jev_confidence * 100 : 0);
-        if (score < 40 || score >= 70) return false;
-      } else if (segment === "saved") {
-        if (job.job_status !== "saved") return false;
-      } else if (segment === "dismissed") {
-        if (job.job_status !== "dismissed") return false;
-      } else if (segment === "hidden") {
-        if (job.job_status !== "dismissed" && job.job_status !== "filtered_out") return false;
-      } else {
-        // "all" active queue: exclude dismissed and filtered_out unless explicitly in dismissed/hidden tab
-        if (job.job_status === "dismissed" || job.job_status === "filtered_out") return false;
-      }
-
-      // 2. Search query filter (title, company, description, tech keywords)
-      if (debouncedSearch.trim()) {
-        const term = debouncedSearch.toLowerCase();
-        const titleMatch = job.title.toLowerCase().includes(term);
-        const compMatch = job.company.toLowerCase().includes(term);
-        const locMatch = (job.location || "").toLowerCase().includes(term);
-        const techMatch = (job.crawler_data?.detected_technologies || []).some((t) =>
-          t.toLowerCase().includes(term)
-        );
-        if (!titleMatch && !compMatch && !locMatch && !techMatch) return false;
-      }
-
-      // 3. Workplace type
-      if (filterCriteria.workplaceType !== "all") {
-        if (job.workplace_type !== filterCriteria.workplaceType) return false;
-      }
-
-      // 4. Source
-      if (filterCriteria.source !== "all") {
-        if (job.source !== filterCriteria.source) return false;
-      }
-
-      // 5. Exclude missing salary
-      if (filterCriteria.missingSalary) {
-        if (!job.salary_min_annual && !job.salary_max_annual) return false;
-      }
-
-      // 6. Exclude missing location
-      if (filterCriteria.missingLocation) {
-        if (!job.location) return false;
-      }
-
-      return true;
-    });
-  }, [allJobs, segment, debouncedSearch, filterCriteria]);
+  const filteredJobs = useMemo(
+    () => filterInboxJobs(allJobs, segment as InboxSegment, debouncedSearch, filterCriteria),
+    [allJobs, segment, debouncedSearch, filterCriteria.workplaceType, filterCriteria.source, filterCriteria.missingSalary, filterCriteria.missingLocation]
+  );
 
   // Sort logic
-  const sortedJobs = useMemo(() => {
-    const list = [...filteredJobs];
-    if (sort === "fit_desc") {
-      list.sort((a, b) => {
-        const scoreA =
-          a.ai_analysis?.overall_fit_score ??
-          (a.jev_confidence != null ? a.jev_confidence * 100 : 0);
-        const scoreB =
-          b.ai_analysis?.overall_fit_score ??
-          (b.jev_confidence != null ? b.jev_confidence * 100 : 0);
-        return scoreB - scoreA;
-      });
-    } else if (sort === "date_desc") {
-      list.sort((a, b) => {
-        const dateA = new Date(a.date_posted || a.date_discovered).getTime();
-        const dateB = new Date(b.date_posted || b.date_discovered).getTime();
-        return dateB - dateA;
-      });
-    } else if (sort === "salary_desc") {
-      list.sort((a, b) => {
-        const salA = a.salary_max_annual || a.salary_min_annual || 0;
-        const salB = b.salary_max_annual || b.salary_min_annual || 0;
-        return salB - salA;
-      });
-    }
-    return list;
-  }, [filteredJobs, sort]);
+  const sortedJobs = useMemo(() => sortInboxJobs(filteredJobs, sort as InboxSort), [filteredJobs, sort]);
 
   // Clamped focused index
   useEffect(() => {
@@ -462,8 +407,10 @@ export function InboxPage() {
   const handleResetFilters = () => {
     setSearch("");
     setDebouncedSearch("");
-    setSegment("all");
-    setFilterCriteria({
+    updateSearch({
+      q: "",
+      segment: "all",
+      sort: "fit_desc",
       workplaceType: "all",
       source: "all",
       missingSalary: false,
@@ -481,7 +428,7 @@ export function InboxPage() {
           searchValue={search}
           onSearchChange={setSearch}
           activeSegment={segment}
-          onSegmentChange={setSegment}
+          onSegmentChange={(value) => updateSearch({ segment: value as InboxSegment })}
           segments={[
             { id: "all", label: "All Active" },
             { id: "recommended", label: "High Fit (≥70%)" },
@@ -490,7 +437,7 @@ export function InboxPage() {
             { id: "dismissed", label: "Dismissed" },
           ]}
           sortValue={sort}
-          onSortChange={setSort}
+          onSortChange={(value) => updateSearch({ sort: value as InboxSort })}
           sortOptions={[
             { id: "fit_desc", label: "Highest Fit" },
             { id: "date_desc", label: "Newest Discovered" },
@@ -506,11 +453,11 @@ export function InboxPage() {
         <FilterPopover
           isOpen={isFilterPopoverOpen}
           criteria={filterCriteria}
-          onChange={setFilterCriteria}
+          onChange={handleFilterCriteriaChange}
           availableSources={availableSources}
           onClose={() => setIsFilterPopoverOpen(false)}
           onReset={() => {
-            setFilterCriteria({
+            handleFilterCriteriaChange({
               workplaceType: "all",
               source: "all",
               missingSalary: false,
