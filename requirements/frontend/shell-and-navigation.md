@@ -48,8 +48,22 @@ Root Shell (__root.tsx)
    - Maximizes horizontal space for dense tables, Kanban columns, and split-screen review.
 
 ### 3.2 Role-Aware Navigation Scoping
-- **Owner Session (`role = 'owner'`):** Full access to all 4 tabs and full visibility into backend engine telemetry.
-- **Guest Session (`role = 'guest'`):** Navigation is automatically scoped to `Explore Jobs` and `Showcase`. The routes `/dashboard` and `/setup` are blocked at the router loader level, and their links are omitted from the DOM.
+- **Owner Session (`role = 'owner'`):** Full access to Inbox, Job Detail, Applications, Dashboard, and Setup, plus owner-only engine telemetry.
+- **Guest Session (`role = 'guest'`):** Navigation includes `Explore Jobs` (`/inbox`) and `Showcase` (`/applications`). Job details remain public but use the sanitized guest view. Dashboard and Setup links are omitted, and direct navigation redirects to `/inbox` from a route loader before those pages mount.
+- **Role resolution:** Resolve the role from `GET /api/session` before role-protected route decisions. While it is pending, render a neutral loading state without owner-only data requests or a misleading guest-access message. If session resolution fails, fail closed to the guest route policy. Backend authorization remains authoritative for every API request.
+- **Route contract:**
+
+  | Route | Owner | Guest |
+  |---|---|---|
+  | `/` | Redirect to `/inbox` | Redirect to `/inbox` |
+  | `/inbox` | Full recommendation workflow | Public curated jobs; mutations unavailable |
+  | `/jobs/:id` | Full job detail and owner AI context | Sanitized public job detail and generic guest AI context |
+  | `/applications` | Private application tracker | Locked portfolio showcase only; never request private application data |
+  | `/dashboard` | Private metrics dashboard | Route-loader redirect to `/inbox` |
+  | `/setup` | Private profile, rules, and discovery tools | Route-loader redirect to `/inbox` |
+
+- Direct navigation, refresh, and in-app navigation must produce the same role-specific outcome. Unknown job IDs render a non-sensitive not-found state. The route tree must register every route in this table, including `/jobs/:id`.
+- Guest navigation must expose both `Explore Jobs` and `Showcase` at desktop and mobile sizes. Owner-only destinations must not appear in guest navigation. The AI control is a global shell action, not a substitute for a route.
 
 ---
 
@@ -83,7 +97,8 @@ All active filter state is bidirectionally serialized into URL search parameters
 
 ### 5.1 Docking, Viewport & Sizing Stability
 - **Desktop ($\ge 1280\text{px}$):** Persistent docked pane (~24rem / 384px wide). When toggled open via `Cmd+K`, `c`, or the top-bar button, the center workspace adjusts smoothly.
-- **Sub-1280px Viewports:** Automatically converts from a docked split pane into an overlay drawer with backdrop blur.
+- **Tablet (768px–1279px):** Converts to an overlay drawer with backdrop blur; it must not shrink the center workspace.
+- **Mobile (<768px):** Opens as a full-screen modal sheet with a visible drag handle. A labeled close button and `Esc` must also dismiss it; gesture dismissal is optional and must not be the only close method.
 - **Spatial Anchoring & Anti-Reflow:** All internal chat feeds, conversation cards, and headers are locked to an inner fixed-width shell (`384px`), completely eliminating text reflow and wrapping jitter during slide transitions.
 
 ### 5.2 Two-Level Viewport Navigation

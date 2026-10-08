@@ -5,7 +5,9 @@ Defines the universal design tokens, color system, WCAG accessibility rules, res
 
 ---
 
-## 2. Color System & Contrast Guardrails (WCAG 2.1 AA/AAA)
+## 2. Color System & Contrast Guardrails (WCAG 2.2 AA)
+
+The MVP conformance target is WCAG 2.2 Level AA. AAA is not claimed as a site-wide target; any additional AAA criterion must be named and verified separately.
 
 ### 2.1 Dual-Theme Architecture
 - **Theme Modes:** Light and Dark modes supported via standard `.dark` CSS class on `document.documentElement` and `color-scheme: light dark`.
@@ -76,9 +78,13 @@ All UI surfaces, borders, and typography derive strictly from global CSS custom 
 ```
 
 ### 2.3 WCAG Guardrails
-1. **Never Color Alone:** Every semantic status (e.g. Recommended, Marginal, Filtered Out) combines the color token with a text label and functional Lucide icon (`CheckCircle2`, `AlertCircle`, `XCircle`).
-2. **Strict Contrast Compliance:** Normal body text $\ge 4.5:1$ (exceeds $7:1$ AAA). Semantic status indicators $\ge 4.5:1$ AA certified.
-3. **Interactive Focus States:** High-visibility 2px solid `--border-focus` with 2px offset (`:focus-visible` only; zero focus rings on mouse click).
+1. **Never Color Alone:** Every semantic status combines color with a text label or an accessible name; icons supplement meaning rather than replacing it.
+2. **Contrast:** Normal text has at least 4.5:1 contrast; large text has at least 3:1. Meaningful control boundaries, focus indicators, and non-text graphics have at least 3:1 against adjacent colors. Verify every used foreground/background pairing in both themes; token names alone do not establish compliance.
+3. **Interactive Focus States:** Keyboard focus is clearly visible, not obscured or clipped, and uses an indicator with at least 3:1 contrast against adjacent colors. Focus styling must remain visible on inputs and controls that reset their native outline.
+4. **Keyboard and focus order:** All functionality is operable by keyboard, focus order follows the visual and task sequence, and no keyboard trap exists outside an intentionally modal interaction.
+5. **Dialogs and drawers:** On open, move focus to an appropriate element; contain Tab/Shift+Tab within the modal; make background content inert; support Escape where cancellation is safe; and restore focus to the opener on close. Provide an accessible name and modal semantics.
+6. **Forms and errors:** Every field has a programmatic label. Required state and validation errors are conveyed in text, associated with the relevant field, and announced when they appear.
+7. **Status announcements:** Sync, triage, save, error, and AI-generation state changes are announced without unexpectedly moving focus.
 
 ---
 
@@ -134,11 +140,18 @@ Micro-interactions use standard CSS transitions (120ms–180ms ease-out) on GPU-
 | **Standard Desktop (`xl`)** | $1280\text{px} - 1535\text{px}$ | Collapsible: Expanded (14rem) $\leftrightarrow$ Slim Rail (3.75rem) via `[` | Fluid single/dual-column feed | **Docked Side-by-Side** (toggled via `Cmd+K` or header action) |
 | **Laptop & Tablet Landscape (`lg`)** | $1024\text{px} - 1279\text{px}$ | Compact Icon Rail (3.75rem / 60px) | Full-width workspace (~960px+) | **Slide-Over Sheet** with backdrop blur (does not squish center workspace) |
 | **Tablet Portrait (`md`)** | $768\text{px} - 1023\text{px}$ | Slide-over navigation drawer via top header trigger | 100% width single-column feed | **Slide-Over Sheet** (swipe to dismiss) |
-| **Mobile (`sm` & below)** | $< 768\text{px}$ | **Sticky Bottom Navigation Bar** (4 primary touch tabs: Inbox, Apps, Metrics, AI) | Single-column touch cards, 44px tap targets | **Full-Screen Modal Sheet** with gesture drag handle |
+| **Mobile (`sm` & below)** | $< 768\text{px}$ | **Sticky Bottom Navigation Bar** (owner: Inbox, Apps, Metrics, Setup; guest: Explore Jobs, Showcase). AI remains a global top-header action. | Single-column touch cards, 44px tap targets | **Full-Screen Modal Sheet** with gesture drag handle |
 
-### 5.3 Mobile Ergonomics (WCAG 2.5.5)
+### 5.3 Mobile Ergonomics (44px Product Target)
 - Sticky bottom navigation bar on screens $< 768\text{px}$ within the natural thumb sweep zone.
-- Minimum interactive touch area of **44px $\times$ 44px** on touch devices.
+- Application target: interactive touch controls provide a minimum target area of **44px $\times$ 44px**. This is the product's ergonomic target, independent of the WCAG 2.2 AA minimum target-size criterion.
+- Every owner destination remains reachable on mobile. The AI assistant is a global shell action, not a replacement for Setup navigation.
+
+### 5.4 Responsive Verification Criteria
+- Verify the application in a browser at viewport widths of **320, 375, 768, 1024, 1280, and 1536 CSS pixels**, in both themes, with the AI dock closed and open and with representative dialogs/popovers open.
+- At each width, verify there is no unintended page-level horizontal scrolling, clipped text, overlapping controls, or inaccessible actions. Intentional horizontal scrolling is allowed for Kanban boards and wide data tables when the scroll region is usable by touch and keyboard and the surrounding page remains usable.
+- Verify Inbox cards and filters, application Kanban and table, dashboard metrics/source table, setup forms, navigation, and AI dock. Include loading, empty, and error states where they materially change layout.
+- Verify reflow at 320 CSS pixels and at 400% browser zoom from a 1280 CSS-pixel viewport. Content must remain readable and operable without loss of functionality, except for content that inherently requires two-dimensional layout and has an accessible alternative or bounded scroll region.
 
 ---
 
@@ -159,3 +172,9 @@ Micro-interactions use standard CSS transitions (120ms–180ms ease-out) on GPU-
    - `Esc`: Close open drawers, modals, or blur active inputs.
 3. **Screen Reader Announcements (`aria-live="polite"`):**
    - Background sync completion, triage status changes, and AI generation statuses announce politely to screen readers.
+
+## 7. Chunk 8 Verification Evidence
+
+- Run an automated accessibility scan (axe or equivalent) on the owner and guest versions of the Inbox and Job Detail, the owner Applications/Dashboard/Setup pages, the guest Applications showcase, and the shell with the AI dock open. Record findings and disposition; automated scans do not replace keyboard and screen-reader checks.
+- Manually verify keyboard-only completion of the primary review workflow, route navigation, application stage editing, and profile editing. Verify dialog focus entry, containment, Escape behavior, and focus restoration.
+- Verify contrast in both themes and responsive behavior against Sections 2 and 5.4. Record tested browser, viewport, role, theme, state, and any accepted exception before marking Chunk 8 complete.

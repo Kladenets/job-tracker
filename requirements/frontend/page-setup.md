@@ -58,7 +58,7 @@
 
 ### 1.6 Guest Mode Boundary & Configuration Locking
 - **Access Rule:** Strictly restricted to authenticated owner sessions (`role = 'owner'`).
-- **Guest Presentation:** Hidden from the guest navigation bar. The underlying `GET/PUT /api/candidate-profile` endpoints reject guest requests with `403 Forbidden` to ensure candidate resume text and personal notes are never leaked.
+- **Guest Presentation:** Hidden from guest navigation. A direct attempt to navigate to `/setup` redirects to `/inbox` in the route loader after session resolution; the setup page must not mount or request private profile/configuration data. The underlying candidate/search profile and discovery endpoints reject guest requests with `403 Forbidden` to ensure resume text, personal notes, and private configuration are never leaked.
 
 ## 2. Non-Functional Requirements
 

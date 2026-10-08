@@ -11,7 +11,7 @@
 | **5** | **Application Tracking Board (`/applications`)** | ✅ **COMPLETE** | Dual Kanban + Table view, spring card physics, interview notes drawer, stage history timeline, add application modal |
 | **6** | **Metrics & Funnel Dashboard (`/dashboard`)** | ✅ **COMPLETE** | Date range presets, custom range picker, monospace metrics, conversion rates, small-sample indicators (`N < 10`), source breakdown |
 | **7** | **Setup, Profiles & Discovery Runs (`/setup`)** | ✅ **COMPLETE** | Candidate profile editor, search rules, crawler health, manual URL ingestion, sync button feedback |
-| **8** | **Role Security, Polish & E2E Verification** | 🚧 **IN PROGRESS** | JWT-verified owner/guest API boundary, repository-backed profiles, isolated API tests, full test suite, lint, and production build verified; WCAG AA/AAA audit and responsive check remain |
+| **8** | **Role Security, Polish & E2E Verification** | 🚧 **IN PROGRESS** | JWT-verified owner/guest API boundary, repository-backed profiles, isolated API tests, full test suite, lint, and production build verified; route-role, WCAG 2.2 AA, and responsive browser verification remain |
 
 ---
 
@@ -172,6 +172,8 @@
 - [x] Local profile JSON seed files are ignored/untracked and excluded from production Docker images.
 - [x] API integration tests force a disposable file repository and do not require PostgreSQL.
 - [x] Full default test suite, `npm run lint`, and `npm run build` pass.
-- [ ] Complete role-aware route/UI audit, WCAG review, and responsive verification.
+- [ ] Verify the owner/guest route matrix and direct-navigation behavior, including `/jobs/:id`, session loading/failure, and private API denial. Record browser-test results; do not treat client guards as the security boundary.
+- [ ] Complete the WCAG 2.2 AA audit in both themes: contrast, keyboard operation, focus visibility/order, dialog focus management, form names/errors, screen-reader announcements, and reduced motion. Record any exceptions and test evidence.
+- [ ] Complete responsive browser checks at 320, 375, 768, 1024, 1280, and 1536 CSS-pixel widths, including open dock/dialog/filter states, touch targets, text fit, page overflow, and intended board/table scrolling.
 
 

@@ -34,10 +34,10 @@
 - Table or bar chart displaying pipeline metrics segmented by source adapter (`greenhouse`, `lever`, `jobspy/indeed`, `jobspy/linkedin`, `manual`):
   - Ingested Count | Recommended Count | Applications Count | Callback Rate.
 
-### 1.6 Guest Mode Boundary & Privacy Restrictions
+## 1.6 Guest Mode Boundary & Privacy Restrictions
 - **Access Rule:** Strictly restricted to authenticated owner sessions (`role = 'owner'`).
 - **Privacy Rationale:** Application conversion rates, recruiter screen rates, and interview pipelines reveal active private job search activity and are kept strictly private.
-- **Guest Presentation:** Hidden from the guest navigation bar. Direct attempts to navigate to `/dashboard` display a polite access boundary card or redirect to `/inbox`.
+- **Guest Presentation:** Hidden from guest navigation. A direct attempt to navigate to `/dashboard` redirects to `/inbox` in the route loader after session resolution; the dashboard page must not mount or request private metrics. `GET /api/dashboard/metrics` remains owner-only and returns `403 Forbidden` for guests.
 
 ## 2. Non-Functional Requirements
 
