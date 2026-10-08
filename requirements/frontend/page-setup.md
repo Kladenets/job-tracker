@@ -33,12 +33,16 @@
   - Target Job Titles & Title Aliases.
   - Target Geographies with editable commute radius and buffer (e.g. Hybrid within 35 miles plus buffer of Doylestown, PA).
   - Workplace Type Preferences (Remote, Hybrid, Onsite checkboxes); unknown workplace/location data remains eligible rather than being inferred as disallowed.
-  - Minimum Annual Salary Expectation.
-  - Hard Excluded Keywords (e.g. `clearance required`, `C++`, `staff level`).
+  - Minimum Annual Salary Expectation, tolerance percentage, and explicit allow-missing-salary option.
+  - Hard Excluded Title Keywords and Companies.
+  - Excluded seniority levels and maximum posting age.
+  - Work-authorization preferences: sponsorship required, existing active clearance, whether to exclude citizenship-only roles, and whether to exclude active-clearance roles when the candidate lacks clearance.
+  - Candidate skills are edited in Candidate Profile and inform JEV analysis; they are not deterministic hard gates because extracted job technologies may be incomplete.
   - Save button validating and persisting updated search criteria to the selected repository. PostgreSQL `user_profiles` is canonical in PostgreSQL mode; file-backed mode persists locally for development/tests.
+- Employment-type filters, preferred industries/companies, configurable scoring weights, and required/preferred-skill hard gates are deferred. Do not display them as active controls until their schema, evaluation semantics, and regression tests exist.
 
 ### 1.3 Source Adapters & Manual Job URL Ingestion
-- **Active Source Health:** Status cards for configured adapters (`Greenhouse`, `Lever`, `JobSpy Scraper`).
+- **Supported Sources:** Informational cards may describe `Greenhouse`, `Lever`, and `JobSpy`; they must not claim live health/readiness unless an actual health check or a timestamped successful run supports that state.
 - **Instant Single Job URL Importer:**
   - Input field to paste any direct job URL (Greenhouse, Lever, LinkedIn, Indeed).
   - "Fetch & Ingest" button that parses the job, extracts fields, runs deterministic filters, scores with JEV, and adds it to the repository.
@@ -46,9 +50,10 @@
 ### 1.4 Manual Discovery Execution Trigger
 - "Run Discovery Pipeline Now" button:
   - Allows selecting target sources (e.g. Greenhouse, Lever, JobSpy).
-  - Live execution progress indicator showing:
+  - While the synchronous request runs, show a pending state without implying that per-source progress is streaming. On completion, show aggregate counts:
     - Discovery status (`Discovered: 15`, `Filtered Out: 4`, `JEV Evaluated: 11`).
   - Displays complete, partial, or failed status, per-source errors, actual positive-fit recommendation count, and a direct link to `/inbox` when any source succeeds.
+  - Successful complete or partial runs and URL imports invalidate the cached Inbox job query.
 
 ### 1.5 System & AI Provider Health Overview
 - Real-time status cards:

@@ -86,6 +86,59 @@ async function runDeduplicationAndStatePreservationTests() {
     "Onsite locations without a resolvable postal centroid must remain unknown, not be guessed distant"
   );
 
+  const salaryRequiredProfile = structuredClone(loadSearchProfile());
+  salaryRequiredProfile.deterministicFilterRules.compensation.allowMissingSalary = false;
+  const missingSalaryPosting = translateRawJobPosting({
+    id: "missing-salary-filter-test",
+    site: "greenhouse",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    description: "Software Engineer role.",
+  });
+  assert(
+    evaluateDeterministicFilter(missingSalaryPosting, salaryRequiredProfile).matchedRules.some(
+      (rule) => rule.rule_id === "salary_missing_not_allowed"
+    ),
+    "Disabling missing-salary tolerance must filter salary-less postings"
+  );
+
+  const clearancePosting = translateRawJobPosting({
+    id: "clearance-filter-test",
+    site: "greenhouse",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    description: "Applicants must possess an active security clearance.",
+  });
+  const clearanceProfile = structuredClone(loadSearchProfile());
+  clearanceProfile.deterministicFilterRules.workAuthorization.excludeRequiresActiveClearance = true;
+  assert(
+    evaluateDeterministicFilter(clearancePosting, clearanceProfile).matchedRules.some(
+      (rule) => rule.rule_id === "requires_security_clearance"
+    ),
+    "Active-clearance requirements must be rejected when the candidate lacks clearance"
+  );
+  clearanceProfile.candidate.hasSecurityClearance = true;
+  assert(
+    evaluateDeterministicFilter(clearancePosting, clearanceProfile).passed,
+    "Active-clearance roles must remain eligible when the candidate has clearance"
+  );
+
+  const citizenshipProfile = structuredClone(loadSearchProfile());
+  citizenshipProfile.deterministicFilterRules.workAuthorization.excludeUsCitizenshipOnly = true;
+  const citizenshipPosting = translateRawJobPosting({
+    id: "citizenship-filter-test",
+    site: "greenhouse",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    description: "This position is for U.S. citizens only.",
+  });
+  assert(
+    evaluateDeterministicFilter(citizenshipPosting, citizenshipProfile).matchedRules.some(
+      (rule) => rule.rule_id === "us_citizenship_only"
+    ),
+    "An enabled citizenship-only exclusion must be enforced"
+  );
+
   // 1. Ingest brand new job posting (First crawl)
   const initialRawJob: RawJobPosting = {
     id: "lever-job-12345",

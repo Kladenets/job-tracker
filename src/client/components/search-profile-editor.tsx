@@ -58,6 +58,8 @@ export interface SearchProfile {
   };
 }
 
+const SENIORITY_LEVELS = ["intern", "entry", "mid", "senior", "lead", "manager", "director", "executive"];
+
 interface SearchProfileEditorProps {
   initialProfile: SearchProfile;
   onSave: (updated: SearchProfile) => Promise<void>;
@@ -200,6 +202,22 @@ export function SearchProfileEditor({
     }));
   };
 
+  const toggleExcludedSeniority = (level: string) => {
+    setProfile((previous) => {
+      const current = previous.deterministicFilterRules.seniority?.excludedLevels || [];
+      const excludedLevels = current.includes(level)
+        ? current.filter((item) => item !== level)
+        : [...current, level];
+      return {
+        ...previous,
+        deterministicFilterRules: {
+          ...previous.deterministicFilterRules,
+          seniority: { excludedLevels },
+        },
+      };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSave(profile);
@@ -297,6 +315,18 @@ export function SearchProfileEditor({
         </div>
       </div>
 
+      <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-2.5">
+        <h3 className="text-xs font-semibold text-[var(--text-primary)]">Skills used for JEV assessment</h3>
+        <p className="text-[11px] text-[var(--text-secondary)]">
+          Skills come from the Candidate Profile and inform AI fit analysis. They are not deterministic hard-exclusion rules; missing extracted technologies remain unknown.
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {profile.candidate.skills.length > 0 ? profile.candidate.skills.map((skill) => (
+            <span key={skill} className="rounded border border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-2 py-1 text-[11px] text-[var(--text-secondary)]">{skill}</span>
+          )) : <span className="text-[11px] text-[var(--text-muted)]">No profile skills configured</span>}
+        </div>
+      </div>
+
       {/* Row 2: Workplace, Compensation, Location */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Workplace Type Preferences */}
@@ -356,6 +386,27 @@ export function SearchProfileEditor({
                 className="w-full h-8.5 pl-6 pr-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-mono-tabular text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)]"
               />
             </div>
+            <label className="block text-[11px] text-[var(--text-secondary)]">
+              Salary tolerance below floor (%)
+              <input
+                type="number"
+                min={0}
+                max={50}
+                step={5}
+                value={profile.deterministicFilterRules.compensation.tolerancePercentage ?? 0}
+                onChange={(e) => setProfile((previous) => ({
+                  ...previous,
+                  deterministicFilterRules: {
+                    ...previous.deterministicFilterRules,
+                    compensation: {
+                      ...previous.deterministicFilterRules.compensation,
+                      tolerancePercentage: Math.min(50, Math.max(0, Number(e.target.value))),
+                    },
+                  },
+                }))}
+                className="mt-1 w-full h-8 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-mono-tabular text-[var(--text-primary)]"
+              />
+            </label>
             <label className="flex items-center gap-2 cursor-pointer pt-1">
               <input
                 type="checkbox"
@@ -579,7 +630,109 @@ export function SearchProfileEditor({
         </div>
       </div>
 
-      {/* Row 4: JEV Qualification Threshold */}
+      {/* Additional deterministic rules supported by the active search profile schema */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-3">
+          <h3 className="text-xs font-semibold text-[var(--text-primary)]">Excluded seniority</h3>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {SENIORITY_LEVELS.map((level) => (
+              <label key={level} className="flex items-center gap-2 capitalize">
+                <input
+                  type="checkbox"
+                  checked={profile.deterministicFilterRules.seniority?.excludedLevels.includes(level) || false}
+                  onChange={() => toggleExcludedSeniority(level)}
+                />
+                {level}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-3">
+          <h3 className="text-xs font-semibold text-[var(--text-primary)]">Posting freshness</h3>
+          <label className="block text-[11px] text-[var(--text-secondary)]">
+            Maximum posting age (days)
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={profile.deterministicFilterRules.postingAge?.maxAgeDays ?? 45}
+              onChange={(e) => setProfile((previous) => ({
+                ...previous,
+                deterministicFilterRules: {
+                  ...previous.deterministicFilterRules,
+                  postingAge: { maxAgeDays: Math.min(365, Math.max(1, Number(e.target.value))) },
+                },
+              }))}
+              className="mt-1 w-full h-8 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs font-mono-tabular text-[var(--text-primary)]"
+            />
+          </label>
+        </div>
+
+        <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-3">
+          <h3 className="text-xs font-semibold text-[var(--text-primary)]">Work authorization</h3>
+          <div className="space-y-2 text-xs">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={profile.candidate.requiresSponsorship}
+                onChange={(e) => setProfile((previous) => ({
+                  ...previous,
+                  candidate: { ...previous.candidate, requiresSponsorship: e.target.checked },
+                }))}
+              />
+              I require work-authorization sponsorship
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={profile.candidate.hasSecurityClearance}
+                onChange={(e) => setProfile((previous) => ({
+                  ...previous,
+                  candidate: { ...previous.candidate, hasSecurityClearance: e.target.checked },
+                }))}
+              />
+              I have an active security clearance
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={profile.deterministicFilterRules.workAuthorization?.excludeUsCitizenshipOnly || false}
+                onChange={(e) => setProfile((previous) => ({
+                  ...previous,
+                  deterministicFilterRules: {
+                    ...previous.deterministicFilterRules,
+                    workAuthorization: {
+                      ...previous.deterministicFilterRules.workAuthorization,
+                      excludeUsCitizenshipOnly: e.target.checked,
+                    },
+                  },
+                }))}
+              />
+              Exclude U.S.-citizens-only roles
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={profile.deterministicFilterRules.workAuthorization?.excludeRequiresActiveClearance ?? true}
+                onChange={(e) => setProfile((previous) => ({
+                  ...previous,
+                  deterministicFilterRules: {
+                    ...previous.deterministicFilterRules,
+                    workAuthorization: {
+                      ...previous.deterministicFilterRules.workAuthorization,
+                      excludeRequiresActiveClearance: e.target.checked,
+                    },
+                  },
+                }))}
+              />
+              Exclude clearance-required roles if I lack clearance
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* JEV Qualification Threshold */}
       <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-xs font-bold text-[var(--text-primary)]">

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Link as LinkIcon,
   Play,
@@ -25,6 +26,7 @@ export function DiscoveryRunsPanel({
   onIngestUrlSuccess,
   onDiscoveryRunSuccess,
 }: DiscoveryRunsPanelProps) {
+  const queryClient = useQueryClient();
   // Single URL Importer state
   const [jobUrl, setJobUrl] = useState("");
   const [urlTitle, setUrlTitle] = useState("");
@@ -85,6 +87,7 @@ export function DiscoveryRunsPanel({
       setJobUrl("");
       setUrlTitle("");
       setUrlCompany("");
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
       onIngestUrlSuccess?.();
     } catch (err: unknown) {
       setUrlResult({
@@ -122,6 +125,7 @@ export function DiscoveryRunsPanel({
           filteredOutCount: data.filteredOutCount,
           details,
         });
+        void queryClient.invalidateQueries({ queryKey: ["jobs"] });
         onDiscoveryRunSuccess?.();
         return;
       }
@@ -145,6 +149,7 @@ export function DiscoveryRunsPanel({
         filteredOutCount: data.filteredOutCount,
         details,
       });
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
       onDiscoveryRunSuccess?.();
     } catch (err: unknown) {
       setDiscoveryResult({
@@ -174,10 +179,10 @@ export function DiscoveryRunsPanel({
       <div className="space-y-3">
         <div>
           <h2 className="text-sm font-bold text-[var(--text-primary)]">
-            Active Source Adapters & Crawler Health
+            Supported Job Sources
           </h2>
           <p className="text-xs text-[var(--text-secondary)]">
-            Real-time status of configured ATS connectors and multi-source scrapers.
+            These connectors are supported. Results and errors are reported after each attempted run; no live health probe is available.
           </p>
         </div>
 
@@ -189,9 +194,8 @@ export function DiscoveryRunsPanel({
                 <Building2 className="h-3.5 w-3.5 text-emerald-500" />
                 Greenhouse ATS
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded border border-[var(--status-recommended-fg)]/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live / HTTP API
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--text-secondary)] bg-[var(--surface-sunken)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
+                Supported
               </span>
             </div>
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
@@ -210,9 +214,8 @@ export function DiscoveryRunsPanel({
                 <Radio className="h-3.5 w-3.5 text-blue-500" />
                 Lever ATS
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded border border-[var(--status-recommended-fg)]/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live / REST API
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--text-secondary)] bg-[var(--surface-sunken)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
+                Supported
               </span>
             </div>
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
@@ -231,17 +234,16 @@ export function DiscoveryRunsPanel({
                 <Globe className="h-3.5 w-3.5 text-purple-500" />
                 JobSpy Scraper CLI
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded border border-[var(--status-recommended-fg)]/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Ready
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--text-secondary)] bg-[var(--surface-sunken)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
+                Supported
               </span>
             </div>
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
               Python multi-board aggregator scraping Indeed, LinkedIn, and Google Jobs with headless browser emulation.
             </p>
             <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[10px] font-mono-tabular text-[var(--text-muted)]">
-              <span>Engine: Python 3 / TLS</span>
-              <span>Proxy: Fallback</span>
+              <span>Engine: Python CLI</span>
+              <span>Run to check availability</span>
             </div>
           </div>
         </div>
@@ -335,7 +337,7 @@ export function DiscoveryRunsPanel({
                     Role: <strong>{urlResult.result.postings[0].title}</strong> ({urlResult.result.postings[0].company})
                   </span>
                   <span>
-                    Fit Score: <strong>{Math.round((urlResult.result.postings[0].jev_confidence || 0) * 100)}%</strong>
+                    JEV confidence: <strong>{Math.round((urlResult.result.postings[0].jev_confidence || 0) * 100)}%</strong>
                   </span>
                   <Link
                     to="/inbox"
@@ -362,7 +364,7 @@ export function DiscoveryRunsPanel({
               Manual Discovery Execution Trigger
             </h3>
             <p className="text-xs text-[var(--text-secondary)]">
-              Initiate a live crawling cycle across selected target adapters to discover and evaluate new postings.
+              Run the selected connectors. Per-source results and aggregate counts appear when the request completes.
             </p>
           </div>
 
@@ -376,6 +378,12 @@ export function DiscoveryRunsPanel({
             <span>{isRunningDiscovery ? "Running Discovery..." : "Run Discovery Pipeline Now"}</span>
           </button>
         </div>
+
+        {isRunningDiscovery && (
+          <p role="status" aria-live="polite" className="text-xs text-[var(--text-secondary)]">
+            Discovery is running. Counts will be available when selected sources finish.
+          </p>
+        )}
 
         {/* Source Selection Checkboxes */}
         <div className="flex flex-wrap items-center gap-4 text-xs pt-1">

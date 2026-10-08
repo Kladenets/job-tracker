@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useBlocker } from "@tanstack/react-router";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
 import { CandidateProfileEditor, CandidateProfile } from "../components/candidate-profile-editor";
 import { SearchProfileEditor, SearchProfile } from "../components/search-profile-editor";
@@ -28,29 +29,26 @@ export function SetupPage() {
   const [isProfileDirty, setIsProfileDirty] = useState(false);
   const [isRulesDirty, setIsRulesDirty] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const hasUnsavedChanges = isProfileDirty || isRulesDirty;
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
-  // Unsaved changes beforeunload warning
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isProfileDirty || isRulesDirty) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isProfileDirty, isRulesDirty]);
+  const navigationBlocker = useBlocker({
+    shouldBlockFn: ({ current, next }) => hasUnsavedChanges && current.pathname !== next.pathname,
+    withResolver: true,
+    enableBeforeUnload: hasUnsavedChanges,
+  });
 
   // 1. Fetch Candidate Profile & Structured Resume
   const {
     data: candidateData,
     isLoading: isProfileLoading,
+    isError: isProfileError,
     error: profileError,
+    refetch: refetchProfile,
   } = useQuery<{ success: boolean; profile: CandidateProfile; resumeData?: any }>({
     queryKey: ["candidate-profile"],
     queryFn: async () => {
@@ -100,7 +98,9 @@ export function SetupPage() {
   const {
     data: searchData,
     isLoading: isSearchLoading,
+    isError: isSearchError,
     error: searchError,
+    refetch: refetchSearch,
   } = useQuery<{ success: boolean; profile: SearchProfile }>({
     queryKey: ["search-profile"],
     queryFn: async () => {
@@ -224,6 +224,11 @@ export function SetupPage() {
                 </div>
                 <div className="h-32 bg-[var(--surface-elevated)] rounded-xl" />
               </div>
+            ) : isProfileError ? (
+              <div role="alert" className="rounded-md border border-[var(--status-danger-fg)]/30 bg-[var(--status-danger-bg)]/20 p-4 space-y-2">
+                <p className="text-sm text-[var(--status-danger-fg)]">{profileError instanceof Error ? profileError.message : "Failed to load candidate profile."}</p>
+                <button type="button" onClick={() => refetchProfile()} className="text-sm underline">Retry</button>
+              </div>
             ) : candidateData?.profile ? (
               <CandidateProfileEditor
                 initialProfile={candidateData.profile}
@@ -236,7 +241,7 @@ export function SetupPage() {
                 onSyncResume={handleSyncResume}
                 onUploadResume={handleUploadResume}
               />
-            ) : null}
+            ) : <p role="alert" className="text-sm text-[var(--text-secondary)]">No candidate profile was returned.</p>}
           </div>
         )}
 
@@ -252,6 +257,11 @@ export function SetupPage() {
                   ))}
                 </div>
               </div>
+            ) : isSearchError ? (
+              <div role="alert" className="rounded-md border border-[var(--status-danger-fg)]/30 bg-[var(--status-danger-bg)]/20 p-4 space-y-2">
+                <p className="text-sm text-[var(--status-danger-fg)]">{searchError instanceof Error ? searchError.message : "Failed to load search profile."}</p>
+                <button type="button" onClick={() => refetchSearch()} className="text-sm underline">Retry</button>
+              </div>
             ) : searchData?.profile ? (
               <SearchProfileEditor
                 initialProfile={searchData.profile}
@@ -261,7 +271,7 @@ export function SetupPage() {
                 isSaving={saveSearchMutation.isPending}
                 onDirtyChange={setIsRulesDirty}
               />
-            ) : null}
+            ) : <p role="alert" className="text-sm text-[var(--text-secondary)]">No search profile was returned.</p>}
           </div>
         )}
 
@@ -280,6 +290,31 @@ export function SetupPage() {
         {/* Tab 4: System & AI Provider Health */}
         {activeTab === "health" && <SystemHealthPanel />}
       </div>
+
+      {navigationBlocker.status === "blocked" && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="unsaved-setup-title" className="w-full max-w-md rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-5 space-y-4 shadow-xl">
+            <div className="space-y-1">
+              <h2 id="unsaved-setup-title" className="font-semibold text-[var(--text-primary)]">Discard unsaved changes?</h2>
+              <p className="text-sm text-[var(--text-secondary)]">Your candidate profile or search rules have unsaved edits.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={navigationBlocker.reset} className="rounded border border-[var(--border-subtle)] px-3 py-2 text-sm">Stay</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProfileDirty(false);
+                  setIsRulesDirty(false);
+                  navigationBlocker.proceed();
+                }}
+                className="rounded bg-[var(--status-danger-fg)] px-3 py-2 text-sm font-semibold text-white"
+              >
+                Discard and leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

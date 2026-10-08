@@ -110,6 +110,13 @@ export function evaluateDeterministicFilter(
         evidence: `Max listed compensation $${effectiveSalary.toLocaleString()} is below minimum tolerance threshold $${Math.round(toleranceMargin).toLocaleString()} (target $${rules.compensation.minSalaryAnnual.toLocaleString()} - ${rules.compensation.tolerancePercentage}%)`,
       });
     }
+  } else if (!rules.compensation.allowMissingSalary) {
+    matchedRules.push({
+      rule_id: "salary_missing_not_allowed",
+      rule_name: "Salary Disclosure Required",
+      passed: false,
+      evidence: "The search profile excludes postings without disclosed salary.",
+    });
   }
 
   // 4. Workplace & Commute Radius
@@ -163,7 +170,7 @@ export function evaluateDeterministicFilter(
   }
 
   // 6. Mandatory Active Security Clearance (if candidate lacks it)
-  if (rules.workAuthorization.excludeRequiresActiveClearance) {
+  if (rules.workAuthorization.excludeRequiresActiveClearance && !activeProfile.candidate.hasSecurityClearance) {
     const clearanceTerms = [
       "active ts/sci",
       "active top secret",
@@ -181,6 +188,26 @@ export function evaluateDeterministicFilter(
         });
         break;
       }
+    }
+  }
+
+  if (rules.workAuthorization.excludeUsCitizenshipOnly || activeProfile.candidate.requiresSponsorship) {
+    const citizenshipTerms = [
+      "u.s. citizens only",
+      "us citizens only",
+      "must be a u.s. citizen",
+      "must be a us citizen",
+      "only u.s. citizens",
+      "only us citizens",
+    ];
+    const matchedTerm = citizenshipTerms.find((term) => descLower.includes(term));
+    if (matchedTerm) {
+      matchedRules.push({
+        rule_id: "us_citizenship_only",
+        rule_name: "U.S. Citizenship Restriction",
+        passed: false,
+        evidence: `Job description includes '${matchedTerm}'.`,
+      });
     }
   }
 

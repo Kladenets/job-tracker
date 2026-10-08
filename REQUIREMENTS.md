@@ -39,17 +39,17 @@ The first release is a decision-support tool. It must not autonomously submit ap
 
 ### 5.1 Configure a search profile
 
-The user can define:
+The MVP user can define:
 
 - desired and excluded job titles;
-- required, preferred, and excluded skills or terms;
-- minimum compensation and acceptable compensation types;
+- candidate skills used as JEV context, plus hard-excluded title keywords (skills are not hard gates in the MVP);
+- minimum annual compensation, tolerance, and whether missing salary is allowed;
 - permitted locations, commute constraints, and remote/hybrid/on-site preferences;
-- employment types;
-- seniority preferences;
-- work-authorization or sponsorship constraints;
-- preferred and excluded companies or industries;
-- relative weights and hard-exclusion rules.
+- excluded seniority levels and maximum posting age;
+- work-authorization sponsorship and explicit citizenship/clearance exclusions;
+- excluded companies.
+
+Employment-type filters, preferred companies/industries, configurable weights, and required/preferred-skill hard gates are deferred until their data semantics, UI, and deterministic/JEV behavior are specified and tested. They must not be presented as active controls in the MVP.
 
 ### 5.2 Discover jobs
 
