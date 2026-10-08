@@ -47,6 +47,7 @@ interface AIDockState {
   conversations: ConversationSummary[];
   activeConversationId: string | null;
   isLoadingConversations: boolean;
+  conversationListError: string | null;
   resetGuestSession: () => void;
   fetchConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
@@ -116,6 +117,7 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
   conversations: [],
   activeConversationId: getInitialActiveConvId(),
   isLoadingConversations: false,
+  conversationListError: null,
 
   resetGuestSession: () => {
     if (typeof window !== "undefined") {
@@ -143,12 +145,12 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
 
   fetchConversations: async () => {
     if (useShellStore.getState().userRole === "guest") {
-      set({ conversations: [], isLoadingConversations: false });
+      set({ conversations: [], isLoadingConversations: false, conversationListError: null });
       return;
     }
 
     try {
-      set({ isLoadingConversations: true });
+      set({ isLoadingConversations: true, conversationListError: null });
       const res = await fetch("/api/agent/conversations");
       if (!res.ok) throw new Error("Failed to fetch conversations");
       const data = await res.json();
@@ -207,12 +209,19 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
         get().selectConversation(activeId);
       }
     } catch (err: unknown) {
-      set({ isLoadingConversations: false });
+      set({
+        isLoadingConversations: false,
+        conversationListError: err instanceof Error ? err.message : "Failed to fetch conversations",
+      });
     }
   },
 
   selectConversation: async (id: string) => {
     if (useShellStore.getState().userRole === "guest") return;
+    if (get().isGenerating) {
+      set({ error: "Wait for the current response to finish before switching conversations." });
+      return;
+    }
 
     try {
       set({
@@ -280,6 +289,11 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
   },
 
   startNewConversation: async (initialJob?: JobContextSummary, initialPrompt?: string) => {
+    if (get().isGenerating) {
+      set({ error: "Wait for the current response to finish before starting a new conversation." });
+      return;
+    }
+
     if (useShellStore.getState().userRole === "guest") {
       const guestConversationId = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       get().setIsOpen(true);
@@ -359,9 +373,15 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
 
   deleteConversation: async (id: string) => {
     if (useShellStore.getState().userRole === "guest") return;
+    if (get().isGenerating) {
+      set({ conversationListError: "Wait for the current response to finish before deleting a conversation." });
+      return;
+    }
 
     try {
-      await fetch(`/api/agent/conversations/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/agent/conversations/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(`Failed to delete conversation (HTTP ${response.status}).`);
+      set({ conversationListError: null });
       const currentActive = get().activeConversationId;
       if (currentActive === id) {
         set({
@@ -376,7 +396,9 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
       }
       get().fetchConversations();
     } catch (err: unknown) {
-      // ignore
+      set({
+        conversationListError: err instanceof Error ? err.message : "Failed to delete conversation.",
+      });
     }
   },
 

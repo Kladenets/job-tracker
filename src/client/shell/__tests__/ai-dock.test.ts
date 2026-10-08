@@ -197,9 +197,59 @@ async function verifyGuestThreadReuse() {
   console.log("  ✔ Guest chat reuses its in-memory thread and includes prior turns");
 }
 
-verifyGuestThreadReuse().catch((error: unknown) => {
-  console.error("Guest chat continuity test failed:", error);
+async function verifyConversationErrorAndGenerationGuards() {
+  const originalFetch = globalThis.fetch;
+  const originalRole = useShellStore.getState().userRole;
+  const previousState = useAIDockStore.getState();
+  let requestCount = 0;
+
+  useShellStore.getState().setUserRole("owner");
+  globalThis.fetch = (async () => {
+    requestCount++;
+    return { ok: false, status: 503, json: async () => ({}) } as Response;
+  }) as typeof fetch;
+
+  try {
+    await useAIDockStore.getState().fetchConversations();
+    assert.match(useAIDockStore.getState().conversationListError || "", /Failed to fetch conversations/);
+    assert.strictEqual(useAIDockStore.getState().conversations.length, 0);
+
+    useAIDockStore.setState({
+      isGenerating: true,
+      activeConversationId: "active-turn",
+      messages: previousState.messages,
+      conversationListError: null,
+    });
+    await useAIDockStore.getState().startNewConversation();
+    await useAIDockStore.getState().selectConversation("other-conversation");
+    await useAIDockStore.getState().deleteConversation("active-turn");
+
+    assert.strictEqual(requestCount, 1, "Generation guards must prevent conversation mutations from issuing requests");
+    assert.strictEqual(useAIDockStore.getState().activeConversationId, "active-turn");
+    assert.strictEqual(useAIDockStore.getState().isGenerating, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    useShellStore.getState().setUserRole(originalRole);
+    useAIDockStore.setState({
+      conversations: previousState.conversations,
+      activeConversationId: previousState.activeConversationId,
+      isLoadingConversations: previousState.isLoadingConversations,
+      conversationListError: previousState.conversationListError,
+      activeJobContext: previousState.activeJobContext,
+      messages: previousState.messages,
+      isGenerating: false,
+      error: previousState.error,
+    });
+  }
+
+  console.log("  ✔ Conversation load errors and in-flight mutation guards verified");
+}
+
+verifyGuestThreadReuse()
+  .then(verifyConversationErrorAndGenerationGuards)
+  .catch((error: unknown) => {
+  console.error("AI dock asynchronous tests failed:", error);
   process.exitCode = 1;
-});
+  });
 
 console.log("All Chunk 3 AI Assistant Dock tests passed successfully!\n");

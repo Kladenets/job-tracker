@@ -29,6 +29,7 @@ export function AIDock() {
     conversations,
     activeConversationId,
     isLoadingConversations,
+    conversationListError,
     fetchConversations,
     selectConversation,
     startNewConversation,
@@ -215,9 +216,10 @@ export function AIDock() {
                   <button
                     type="button"
                     onClick={() => startNewConversation()}
+                    disabled={isGenerating}
                     title="Start new conversation"
                     aria-label="Start new conversation"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>New</span>
@@ -246,6 +248,17 @@ export function AIDock() {
                     <Sparkles className="h-4 w-4 animate-spin text-amber-500" />
                     <span>Loading conversations...</span>
                   </div>
+                ) : conversationListError ? (
+                  <div role="alert" className="p-6 text-center text-xs text-[var(--status-danger-fg)] space-y-2">
+                    <p>Conversation history could not be loaded.</p>
+                    <button
+                      type="button"
+                      onClick={() => fetchConversations()}
+                      className="px-3 py-1.5 rounded-md border border-[var(--border-subtle)] text-[var(--text-primary)]"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 ) : filteredConversations.length === 0 ? (
                   <div className="p-6 text-center text-xs text-[var(--text-muted)] space-y-2">
                     <p>No conversations found.</p>
@@ -264,6 +277,7 @@ export function AIDock() {
                       <div
                         key={conv.id}
                         onClick={() => selectConversation(conv.id)}
+                        aria-disabled={isGenerating}
                         className={`group relative rounded-lg border p-2.5 text-xs transition-all cursor-pointer ${
                           isActive
                             ? "border-[var(--border-focus)] bg-[var(--surface-sunken)] shadow-xs"
@@ -313,11 +327,14 @@ export function AIDock() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteConversation(conv.id);
+                              if (window.confirm(`Delete "${conv.title}"? This cannot be undone.`)) {
+                                deleteConversation(conv.id);
+                              }
                           }}
+                            disabled={isGenerating}
                           title="Delete conversation"
                           aria-label="Delete conversation"
-                          className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 p-1 rounded hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger-fg)] text-[var(--text-muted)] transition-all cursor-pointer"
+                          className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 p-1 rounded hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger-fg)] text-[var(--text-muted)] transition-all cursor-pointer disabled:cursor-not-allowed"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -349,6 +366,7 @@ export function AIDock() {
                   <button
                     type="button"
                     onClick={() => setDockView("list")}
+                    disabled={isGenerating}
                     title="Back to conversation list"
                     aria-label="Back to conversation list"
                     className="p-1 rounded-md hover:bg-[var(--surface-sunken)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
@@ -394,9 +412,10 @@ export function AIDock() {
                   <button
                     type="button"
                     onClick={() => startNewConversation()}
+                    disabled={isGenerating}
                     title="Start new conversation"
                     aria-label="Start new conversation"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>New</span>
