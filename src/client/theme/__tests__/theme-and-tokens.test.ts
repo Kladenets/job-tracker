@@ -12,6 +12,12 @@ const globalsCssPath = path.join(process.cwd(), "src", "client", "styles", "glob
 assert.ok(fs.existsSync(globalsCssPath), "globals.css must exist");
 
 const cssContent = fs.readFileSync(globalsCssPath, "utf-8");
+const indexHtml = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf-8");
+
+assert.ok(indexHtml.includes('localStorage.getItem("job_tracker_theme")'));
+assert.ok(indexHtml.includes('window.matchMedia("(prefers-color-scheme: dark)")'));
+assert.ok(indexHtml.includes('document.documentElement.classList.add("dark")'));
+assert.ok(indexHtml.includes('document.documentElement.style.colorScheme = useDark ? "dark" : "light"'));
 
 const requiredTokens = [
   "--surface-base",
@@ -51,7 +57,7 @@ assert.ok(
   "globals.css must contain prefers-reduced-motion accessibility guard"
 );
 
-console.log("  ✔ Design system tokens and accessibility guards verified in globals.css");
+console.log("  ✔ Design tokens, pre-paint theme bootstrap, and accessibility guards verified");
 
 // ====================================================================
 // Test 2: Theme DOM Application & Color Scheme Synchronization

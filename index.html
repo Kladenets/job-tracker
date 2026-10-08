@@ -3,6 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (() => {
+        try {
+          const savedTheme = localStorage.getItem("job_tracker_theme");
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const useDark = savedTheme === "dark" || (savedTheme !== "light" && prefersDark);
+          if (useDark) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = useDark ? "dark" : "light";
+        } catch {
+          document.documentElement.style.colorScheme = "light";
+        }
+      })();
+    </script>
     <title>Job Tracker - High-Density Autonomous Job Discovery & Triage</title>
     <meta name="description" content="Local ingestion and job tracking backend engine powered by Python JobSpy CLI bridge, Express API, and modern React interface." />
     <meta property="og:title" content="Job Tracker - High-Density Autonomous Job Discovery & Triage" />

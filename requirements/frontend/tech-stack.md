@@ -10,10 +10,9 @@ Provide a unified, high-performance, single-page web interface (SPA) for the Job
   - *Justification:* Near-instant local HMR, lean client bundle, fast production builds, and native React 19 concurrency primitives (`useOptimistic`, `useActionState`).
 - **Routing:** TanStack Router
   - *Justification:* 100% type-safe routing, nested layouts, and first-class search parameter validation with Zod. Essential for preserving complex URL filter states (status, workplace type, sort orders, and active job selections) without runtime type guessing.
-- **Component & UI Foundation:** shadcn/ui + Tailwind CSS
-  - *Justification:* Headless Radix UI accessibility primitives styled with utility-first Tailwind CSS. Components live directly in the codebase (`src/components/ui`), offering full design ownership, crisp high-density aesthetics, and consistent design system tokens (borders, muted surfaces, focus rings) without third-party vendor lock-in.
-- **Animation Engine:** React Motion
-  - *Justification:* Physics-based spring animations for fluid, natural UI transitions: recommendation card triage (swipe/dismiss/save), slide-out AI assistant drawer, modal dialogues, and Kanban column movements.
+- **Component & UI Foundation:** Tailwind CSS 4 with application-owned React components and CSS design tokens.
+  - Radix UI and shadcn/ui are not currently installed or required. Do not add or migrate to them without an explicit design/architecture decision; preserve the existing component conventions.
+- **Animation:** CSS transitions and transforms are the current implementation. No spring-animation library is installed or required. Prefer CSS for the existing transitions; any future animation dependency must be proposed explicitly and honor `prefers-reduced-motion`.
 - **Icons:** `lucide-react`
   - *Justification:* High-consistency icon set across all navigation, status badges, metrics, and triage action buttons.
 - **State Management & Data Fetching:** TanStack Query (React Query v5)
@@ -32,10 +31,9 @@ Provide a unified, high-performance, single-page web interface (SPA) for the Job
 - API tests force a fresh temporary file-backed repository and must not require PostgreSQL or modify developer data. PostgreSQL integration tests are a separate opt-in suite using a disposable database.
 
 ### Local-to-Remote / Staging Testing:
-- When running the local UI against a remote server (e.g., the Oracle VM staging or production instance behind Cloudflare Access):
-  - Configure `VITE_API_URL=https://staging-jobs.yourdomain.com` or local proxy target.
-  - The frontend client includes an `Authorization: Bearer <API_SECRET_KEY>` header if configured in `.env.local`.
-  - The backend auth middleware verifies this Bearer token and authorizes the session as the owner, completely bypassing the need for manual browser cookie manipulation across Cloudflare Zero Trust.
+- Open the staging application origin directly through Cloudflare Access for browser-based owner testing. The UI uses same-origin `/api` requests, and Cloudflare Access authenticates the browser session.
+- Do not place `API_SECRET_KEY` in Vite variables, `.env.local` values exposed to the client, request headers from browser code, or built assets. It is a trusted automation credential, not a browser login mechanism.
+- Running a local Vite UI against a remote API is not an MVP-supported workflow. Add it only with a server-side proxy/authentication design that never exposes owner credentials to the browser and explicitly handles origin, cookies, and CORS.
 
 ## 4. Staging vs. Production Multi-Environment Strategy
 
