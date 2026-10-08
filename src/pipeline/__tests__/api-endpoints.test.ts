@@ -539,6 +539,16 @@ async function runApiTests() {
 
     // 8. Test GET /api/dashboard/metrics
     console.log("[Test 8] Testing GET /api/dashboard/metrics...");
+    const invalidMetricRangeRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/dashboard/metrics?startDate=not-a-date",
+    });
+    assert.strictEqual(invalidMetricRangeRes.statusCode, 400, "Malformed dashboard date ranges must be rejected");
+    const reversedMetricRangeRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/dashboard/metrics?startDate=2026-10-08T00%3A00%3A00.000Z&endDate=2026-10-07T23%3A59%3A59.999Z",
+    });
+    assert.strictEqual(reversedMetricRangeRes.statusCode, 400, "Reversed dashboard date ranges must be rejected");
     const metricsRes = await makeRequest(testServer, {
       method: "GET",
       path: "/api/dashboard/metrics",

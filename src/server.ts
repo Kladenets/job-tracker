@@ -980,9 +980,21 @@ app.get("/api/dashboard/metrics", async (req: Request, res: Response) => {
       });
     }
 
+    const dateRange = z.object({
+      startDate: z.string().datetime().optional(),
+      endDate: z.string().datetime().optional(),
+    }).refine(({ startDate, endDate }) => !startDate || !endDate || startDate <= endDate, {
+      message: "startDate must be on or before endDate",
+    }).safeParse({
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    });
+    if (!dateRange.success) {
+      return res.status(400).json({ success: false, error: "Invalid metric date range", details: dateRange.error.flatten() });
+    }
+
     const { repository } = getRepository();
-    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : undefined;
-    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : undefined;
+    const { startDate, endDate } = dateRange.data;
 
     const metrics = await repository.getMetrics({ startDate, endDate });
     return res.json({ success: true, metrics });

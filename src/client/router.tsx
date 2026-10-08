@@ -22,6 +22,12 @@ const inboxSearchSchema = z.object({
   missingLocation: z.preprocess((value) => value === true || value === "true", z.boolean()).catch(false),
 });
 
+const dashboardSearchSchema = z.object({
+  range: z.enum(["7d", "30d", "90d", "all", "custom"]).catch("30d"),
+  startDate: z.string().max(40).optional().catch(undefined),
+  endDate: z.string().max(40).optional().catch(undefined),
+});
+
 // 1. Root route housing persistent shell (left rail, outlet, mobile bar)
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -55,6 +61,7 @@ const applicationsRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
+  validateSearch: dashboardSearchSchema,
   component: DashboardPage,
 });
 

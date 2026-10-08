@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getCustomDateRangeParams, getDashboardDateRangeError, getUtcInclusiveEndOfDay, isValidDateOnly } from "../../dashboard-dates";
 
 console.log("Running Metrics & Funnel Dashboard Unit Tests (Chunk 6)...");
 
@@ -31,6 +32,16 @@ assert.strictEqual(thirtyDays.endMs - thirtyDays.startMs, 30 * 24 * 60 * 60 * 10
 
 const allTime = computeDateRangeBounds("all", undefined, undefined, mockNow);
 assert.strictEqual(allTime.startMs, 0, "All time start must be epoch 0");
+assert.strictEqual(isValidDateOnly("2026-10-07"), true);
+assert.strictEqual(isValidDateOnly("2026-02-30"), false);
+assert.strictEqual(getDashboardDateRangeError("custom", "2026-10-08", "2026-10-07"), "Start date must be on or before end date.");
+assert.strictEqual(getUtcInclusiveEndOfDay("2026-10-07"), "2026-10-07T23:59:59.999Z");
+assert.strictEqual(getCustomDateRangeParams("2026-02-30", "2026-03-01"), null);
+assert.strictEqual(getCustomDateRangeParams("2026-10-08", "2026-10-07"), null);
+assert.deepStrictEqual(getCustomDateRangeParams("2026-10-07", "2026-10-07"), {
+  startDate: "2026-10-07T00:00:00.000Z",
+  endDate: "2026-10-07T23:59:59.999Z",
+});
 
 console.log("  ✔ Date range boundary calculation verified");
 

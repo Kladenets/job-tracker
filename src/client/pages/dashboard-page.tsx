@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
 import { MetricCard } from "../components/metric-card";
 import { SourceBreakdownTable } from "../components/source-breakdown-table";
 import { FunnelVisualizer } from "../components/funnel-visualizer";
 import { useShellStore } from "../shell/shell-store";
+import { getCustomDateRangeParams, getDashboardDateRangeError } from "../dashboard-dates";
 import { ShieldAlert, AlertTriangle, Inbox, Calendar, RefreshCw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -51,55 +53,17 @@ interface DashboardMetricsResponse {
 export function DashboardPage() {
   const { userRole } = useShellStore();
   const isGuest = userRole === "guest";
+  const routeSearch = useSearch({ from: "/dashboard" });
+  const navigate = useNavigate({ from: "/dashboard" });
 
-  // Date Range Presets: 7d, 30d, 90d, all, custom (serialized in URL search params per page-dashboard.md section 1.1)
-  const [segment, setSegment] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      const r = sp.get("range");
-      if (r && ["7d", "30d", "90d", "all", "custom"].includes(r)) {
-        return r;
-      }
-    }
-    return "30d";
-  });
-  const [customStart, setCustomStart] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      return sp.get("startDate") || "";
-    }
-    return "";
-  });
-  const [customEnd, setCustomEnd] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      return sp.get("endDate") || "";
-    }
-    return "";
-  });
+  const segment = routeSearch.range;
+  const customStart = routeSearch.startDate || "";
+  const customEnd = routeSearch.endDate || "";
+  const dateRangeError = getDashboardDateRangeError(segment, customStart, customEnd);
 
-  // Keep URL search parameters synchronized with active date filter
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      sp.set("range", segment);
-      if (segment === "custom") {
-        if (customStart) sp.set("startDate", customStart);
-        else sp.delete("startDate");
-        if (customEnd) sp.set("endDate", customEnd);
-        else sp.delete("endDate");
-      } else {
-        sp.delete("startDate");
-        sp.delete("endDate");
-      }
-      const newSearch = sp.toString();
-      const currentSearch = window.location.search.replace(/^\?/, "");
-      if (newSearch !== currentSearch) {
-        const newUrl = `${window.location.pathname}?${newSearch}`;
-        window.history.replaceState(null, "", newUrl);
-      }
-    }
-  }, [segment, customStart, customEnd]);
+  const updateSearch = (updates: Partial<typeof routeSearch>, replace = false) => {
+    navigate({ search: (previous) => ({ ...previous, ...updates }), replace });
+  };
 
   // Calculate start & end ISO dates based on active segment
   const dateParams = useMemo(() => {
@@ -107,15 +71,12 @@ export function DashboardPage() {
       return {};
     }
     if (segment === "custom") {
-      return {
-        startDate: customStart ? new Date(customStart).toISOString() : undefined,
-        endDate: customEnd ? new Date(customEnd).toISOString() : undefined,
-      };
+      return getCustomDateRangeParams(customStart || undefined, customEnd || undefined) || {};
     }
     const days = segment === "7d" ? 7 : segment === "90d" ? 90 : 30;
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     return { startDate: start, endDate: new Date().toISOString() };
-  }, [segment, customStart, customEnd]);
+  }, [segment, customStart, customEnd, dateRangeError]);
 
   // Fetch Dashboard Metrics API
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery<DashboardMetricsResponse>({
@@ -131,7 +92,7 @@ export function DashboardPage() {
       }
       return res.json();
     },
-    enabled: !isGuest,
+    enabled: !isGuest && !dateRangeError,
   });
 
   // Guest Mode Perimeter Check (page-dashboard.md section 1.6)
@@ -169,7 +130,11 @@ export function DashboardPage() {
       <StickyFilterBar
         showSearch={false}
         activeSegment={segment}
-        onSegmentChange={setSegment}
+        onSegmentChange={(range) => updateSearch({
+          range: range as typeof routeSearch.range,
+          startDate: range === "custom" ? routeSearch.startDate : undefined,
+          endDate: range === "custom" ? routeSearch.endDate : undefined,
+        })}
         segments={[
           { id: "7d", label: "Last 7 Days" },
           { id: "30d", label: "Last 30 Days" },
@@ -229,14 +194,14 @@ export function DashboardPage() {
               <input
                 type="date"
                 value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
+                onChange={(e) => updateSearch({ startDate: e.target.value || undefined }, true)}
                 className="h-7 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)]"
               />
               <label className="text-[var(--text-muted)]">To</label>
               <input
                 type="date"
                 value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
+                onChange={(e) => updateSearch({ endDate: e.target.value || undefined }, true)}
                 className="h-7 px-2 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)]"
               />
             </div>
@@ -244,7 +209,16 @@ export function DashboardPage() {
         )}
 
         {/* Loading Skeletons */}
-        {isLoading ? (
+        {dateRangeError ? (
+          <div role="alert" className="rounded-md border border-[var(--status-danger-fg)]/30 bg-[var(--status-danger-bg)]/20 p-4 text-sm text-[var(--status-danger-fg)]">
+            {dateRangeError}
+          </div>
+        ) : isError ? (
+          <div role="alert" className="rounded-md border border-[var(--status-danger-fg)]/30 bg-[var(--status-danger-bg)]/20 p-4 text-sm text-[var(--status-danger-fg)] flex items-center justify-between gap-3">
+            <span>{error instanceof Error ? error.message : "Failed to load metrics."}</span>
+            <button type="button" onClick={() => refetch()} className="shrink-0 underline">Retry</button>
+          </div>
+        ) : isLoading ? (
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (

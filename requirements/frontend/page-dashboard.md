@@ -6,6 +6,7 @@
 - **Sticky Controls Header:** Positioned at top of page viewport with backdrop blur (`backdrop-filter: blur(8px)`).
 - **Date Range Presets:** `Last 7 Days`, `Last 30 Days`, `Last 90 Days`, `All Time`, and `Custom Range`.
 - All metric queries respect the active date range filter and serialize into TanStack Router URL params.
+- Custom dates are calendar dates interpreted in UTC. Both selected boundary days are inclusive; the server query uses UTC start-of-day through `23:59:59.999Z` on the end date. Invalid dates and reversed ranges show an inline correction message and do not issue a metrics request.
 
 ### 1.2 Core Discovery Funnel Cards
 - **Jobs Discovered:** Total raw job postings ingested across all sources within the period (tabular monospace).
@@ -41,5 +42,5 @@
 
 ## 2. Non-Functional Requirements
 
-- **Computation Efficiency:** Calculations must be performed on the backend via `GET /api/dashboard/metrics` with low latency (<50ms).
+- **Computation Efficiency:** Calculations must be performed on the backend via `GET /api/dashboard/metrics`. The `<50ms` target is measured as P95 request time with a PostgreSQL dataset of 10,000 postings and 2,000 applications on the staging host; if it is exceeded, use indexed/database-side aggregation rather than loading every row into application memory. File-store development mode is excluded from this latency target.
 - **Zero Div-by-Zero Errors:** Gracefully display `0%` or `N/A` when denominators are zero.
