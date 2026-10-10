@@ -11,7 +11,7 @@
 | **5** | **Application Tracking Board (`/applications`)** | ✅ **COMPLETE** | Dual Kanban + Table view, spring card physics, interview notes drawer, stage history timeline, add application modal |
 | **6** | **Metrics & Funnel Dashboard (`/dashboard`)** | ✅ **COMPLETE** | Date range presets, custom range picker, monospace metrics, conversion rates, small-sample indicators (`N < 10`), source breakdown |
 | **7** | **Setup, Profiles & Discovery Runs (`/setup`)** | ✅ **COMPLETE** | Candidate profile editor, search rules, crawler health, manual URL ingestion, sync button feedback |
-| **8** | **Role Security, Polish & E2E Verification** | 🚧 **IN PROGRESS** | JWT-verified owner/guest API boundary, repository-backed profiles, isolated API tests, full test suite, lint, and production build verified; route-role, WCAG 2.2 AA, and responsive browser verification remain |
+| **8** | **Role Security, Polish & E2E Verification** | ✅ **COMPLETE** | JWT-verified owner/guest API boundary, repository-backed profiles, isolated API tests, full suite, lint/build, route-role matrix, WCAG 2.2 AA, and responsive browser checks verified; see [dated verification record](frontend-chunk-8-verification-2026-10-07.md) |
 
 ---
 
@@ -163,17 +163,18 @@
 
 ---
 
-## In Progress: Chunk 8 Deliverables
+## Completed: Chunk 8 Deliverables
 - [x] Fail-closed production auth with explicit guest-route allowlist and owner-only defaults.
 - [x] Cloudflare owner identity requires a valid signed JWT, matching issuer/audience, forwarded email, and configured `ALLOWED_USER_EMAIL`.
 - [x] Public job list/detail responses use a sanitized DTO that excludes owner workflow and analysis data.
+- [x] Public `GET /api/health` returns readiness only; persistence/provider diagnostics are owner-only on `GET /api/system/health`.
 - [x] Guest role is initialized from `/api/session`; guest AI reuses a bounded in-memory thread and a non-persistent, tool-free server endpoint.
 - [x] PostgreSQL `user_profiles` is canonical for candidate profiles, structured resumes, and search criteria; file-repository mode seeds and persists through its local store.
 - [x] Local profile JSON seed files are ignored/untracked and excluded from production Docker images.
 - [x] API integration tests force a disposable file repository and do not require PostgreSQL.
 - [x] Full default test suite, `npm run lint`, and `npm run build` pass.
-- [ ] Verify the owner/guest route matrix and direct-navigation behavior, including `/jobs/:id`, session loading/failure, and private API denial. Record browser-test results; do not treat client guards as the security boundary.
-- [ ] Complete the WCAG 2.2 AA audit in both themes: contrast, keyboard operation, focus visibility/order, dialog focus management, form names/errors, screen-reader announcements, and reduced motion. Record any exceptions and test evidence.
-- [ ] Complete responsive browser checks at 320, 375, 768, 1024, 1280, and 1536 CSS-pixel widths, including open dock/dialog/filter states, touch targets, text fit, page overflow, and intended board/table scrolling.
+- [x] Verify the owner/guest route matrix and direct-navigation behavior, including `/jobs/:id`, session loading/failure, and private API denial. Browser guard checks confirm guest Dashboard/Setup redirect before private API requests; backend auth integration tests remain the security-boundary verification.
+- [x] Complete the WCAG 2.2 AA audit in both themes: contrast, keyboard operation, focus visibility/order, dialog focus management, form names/errors, screen-reader announcements, and reduced motion. Axe checks have zero violations on required routes/states; see the evidence record for manually reviewed contrast and keyboard checks.
+- [x] Complete responsive browser checks at 320, 375, 768, 1024, 1280, and 1536 CSS-pixel widths, including open dock/dialog/filter states, 44px touch targets, text fit, page overflow, and intended board/table scrolling. Native 400% browser zoom was unavailable; the equivalent 320 CSS-pixel reflow viewport was verified and the limitation recorded.
 
 
