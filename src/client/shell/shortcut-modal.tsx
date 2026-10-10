@@ -1,19 +1,12 @@
-import React, { useEffect } from "react";
+import React, { useRef } from "react";
 import { useShellStore } from "./shell-store";
 import { X, Keyboard } from "lucide-react";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 
 export function ShortcutHelpModal() {
   const { shortcutHelpOpen, setShortcutHelpOpen } = useShellStore();
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && shortcutHelpOpen) {
-        setShortcutHelpOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [shortcutHelpOpen, setShortcutHelpOpen]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, { enabled: shortcutHelpOpen, onClose: () => setShortcutHelpOpen(false), initialFocusSelector: '[aria-label="Close keyboard shortcuts"]' });
 
   if (!shortcutHelpOpen) return null;
 
@@ -31,9 +24,11 @@ export function ShortcutHelpModal() {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="shortcut-title"
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
     >
       <div className="w-full max-w-md rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-6 shadow-xl space-y-4">

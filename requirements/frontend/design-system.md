@@ -36,6 +36,7 @@ All UI surfaces, borders, and typography derive strictly from global CSS custom 
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
   --border-focus: #2563eb;
+  --action-primary-bg: #2563eb;
 
   /* Functional Semantic Statuses (Never Rely on Color Alone) */
   --status-recommended-fg: #15803d;
@@ -64,6 +65,7 @@ All UI surfaces, borders, and typography derive strictly from global CSS custom 
   --border-subtle: #1e293b;
   --border-strong: #334155;
   --border-focus: #3b82f6;
+  --action-primary-bg: #1d4ed8;
 
   /* Functional Semantic Statuses */
   --status-recommended-fg: #4ade80;
@@ -79,12 +81,13 @@ All UI surfaces, borders, and typography derive strictly from global CSS custom 
 
 ### 2.3 WCAG Guardrails
 1. **Never Color Alone:** Every semantic status combines color with a text label or an accessible name; icons supplement meaning rather than replacing it.
-2. **Contrast:** Normal text has at least 4.5:1 contrast; large text has at least 3:1. Meaningful control boundaries, focus indicators, and non-text graphics have at least 3:1 against adjacent colors. Verify every used foreground/background pairing in both themes; token names alone do not establish compliance.
+2. **Contrast:** Normal text has at least 4.5:1 contrast; large text has at least 3:1. Meaningful control boundaries, focus indicators, and non-text graphics have at least 3:1 against adjacent colors. Filled primary actions use `--action-primary-bg` with white text and must retain at least 4.5:1 contrast in both themes. Verify every used foreground/background pairing; token names alone do not establish compliance.
 3. **Interactive Focus States:** Keyboard focus is clearly visible, not obscured or clipped, and uses an indicator with at least 3:1 contrast against adjacent colors. Focus styling must remain visible on inputs and controls that reset their native outline.
 4. **Keyboard and focus order:** All functionality is operable by keyboard, focus order follows the visual and task sequence, and no keyboard trap exists outside an intentionally modal interaction.
 5. **Dialogs and drawers:** On open, move focus to an appropriate element; contain Tab/Shift+Tab within the modal; make background content inert; support Escape where cancellation is safe; and restore focus to the opener on close. Provide an accessible name and modal semantics.
 6. **Forms and errors:** Every field has a programmatic label. Required state and validation errors are conveyed in text, associated with the relevant field, and announced when they appear.
 7. **Status announcements:** Sync, triage, save, error, and AI-generation state changes are announced without unexpectedly moving focus.
+8. **Bypass blocks:** Provide a keyboard-visible skip link before global navigation that moves focus to the main content.
 
 ---
 
@@ -151,7 +154,8 @@ Micro-interactions use standard CSS transitions (120ms–180ms ease-out) on GPU-
 - Verify the application in a browser at viewport widths of **320, 375, 768, 1024, 1280, and 1536 CSS pixels**, in both themes, with the AI dock closed and open and with representative dialogs/popovers open.
 - At each width, verify there is no unintended page-level horizontal scrolling, clipped text, overlapping controls, or inaccessible actions. Intentional horizontal scrolling is allowed for Kanban boards and wide data tables when the scroll region is usable by touch and keyboard and the surrounding page remains usable.
 - Verify Inbox cards and filters, application Kanban and table, dashboard metrics/source table, setup forms, navigation, and AI dock. Include loading, empty, and error states where they materially change layout.
-- Verify reflow at 320 CSS pixels and at 400% browser zoom from a 1280 CSS-pixel viewport. Content must remain readable and operable without loss of functionality, except for content that inherently requires two-dimensional layout and has an accessible alternative or bounded scroll region.
+- Modal and drawer content taller than the viewport must scroll within the dialog or overlay so the final action buttons remain reachable above the mobile navigation; modal footers must not be clipped by the viewport.
+- Verify reflow at 320 CSS pixels. Also verify at 400% browser zoom from a 1280 CSS-pixel viewport when browser tooling supports changing native zoom; if it does not, record the limitation and use a direct 320 CSS-pixel viewport as the equivalent responsive reflow check without claiming native zoom was tested. Content must remain readable and operable without loss of functionality, except for content that inherently requires two-dimensional layout and has an accessible alternative or bounded scroll region.
 
 ---
 

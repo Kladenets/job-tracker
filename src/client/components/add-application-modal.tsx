@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ApplicationStatus, ApplicationStatusSchema } from "../../types/job-posting";
 import { X, Building2, Briefcase, Link as LinkIcon, Calendar, FileText } from "lucide-react";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 
 interface AddApplicationModalProps {
   isOpen: boolean;
@@ -46,6 +47,8 @@ export function AddApplicationModal({
   const [nextActionDate, setNextActionDate] = useState("");
   const [userNotes, setUserNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, { enabled: isOpen, onClose, initialFocusSelector: "#add-application-company" });
 
   if (!isOpen) return null;
 
@@ -84,12 +87,14 @@ export function AddApplicationModal({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-application-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-lg rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] shadow-2xl p-6 space-y-5 overflow-hidden">
+      <div className="relative my-auto w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-base)] shadow-2xl p-4 sm:p-6 space-y-5">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
           <div>
@@ -111,7 +116,7 @@ export function AddApplicationModal({
         </div>
 
         {formError && (
-          <div className="p-3 rounded-md bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)] text-xs border border-[var(--status-danger-fg)]/20">
+          <div role="alert" aria-live="assertive" className="p-3 rounded-md bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)] text-xs border border-[var(--status-danger-fg)]/20">
             {formError}
           </div>
         )}
@@ -121,11 +126,12 @@ export function AddApplicationModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Company */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+              <label htmlFor="add-application-company" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
                 <Building2 className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 Company <span className="text-[var(--status-danger-fg)]">*</span>
               </label>
               <input
+                id="add-application-company"
                 type="text"
                 required
                 value={company}
@@ -137,11 +143,12 @@ export function AddApplicationModal({
 
             {/* Title */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+              <label htmlFor="add-application-title" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
                 <Briefcase className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 Job Title <span className="text-[var(--status-danger-fg)]">*</span>
               </label>
               <input
+                id="add-application-title"
                 type="text"
                 required
                 value={title}
@@ -155,10 +162,11 @@ export function AddApplicationModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Stage */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">
+              <label htmlFor="add-application-stage" className="text-xs font-semibold text-[var(--text-secondary)]">
                 Initial Pipeline Stage
               </label>
               <select
+                id="add-application-stage"
                 value={status}
                 onChange={(e) => {
                   const nextStatus = e.target.value as ApplicationStatus;
@@ -178,11 +186,12 @@ export function AddApplicationModal({
 
             {/* Date Applied */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+              <label htmlFor="add-application-date" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 Date Applied
               </label>
               <input
+                id="add-application-date"
                 type="date"
                 value={appliedAt}
                 disabled={status === "preparing"}
@@ -195,11 +204,12 @@ export function AddApplicationModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Application URL */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+              <label htmlFor="add-application-url" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
                 <LinkIcon className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 Posting / Portal URL
               </label>
               <input
+                id="add-application-url"
                 type="url"
                 value={applicationUrl}
                 onChange={(e) => setApplicationUrl(e.target.value)}
@@ -210,11 +220,12 @@ export function AddApplicationModal({
 
             {/* Next Action Deadline */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+              <label htmlFor="add-application-next-action" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 Next Action Due Date
               </label>
               <input
+                id="add-application-next-action"
                 type="date"
                 value={nextActionDate}
                 onChange={(e) => setNextActionDate(e.target.value)}
@@ -225,11 +236,12 @@ export function AddApplicationModal({
 
           {/* User Notes */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
+            <label htmlFor="add-application-notes" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1">
               <FileText className="h-3.5 w-3.5 text-[var(--text-muted)]" />
               Notes / Recruiter Thread / Salary Expectation
             </label>
             <textarea
+              id="add-application-notes"
               rows={3}
               value={userNotes}
               onChange={(e) => setUserNotes(e.target.value)}
@@ -250,7 +262,7 @@ export function AddApplicationModal({
             <button
               type="submit"
               disabled={isLoading}
-              className="px-4 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 shadow-xs"
+              className="px-4 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 shadow-xs"
             >
               {isLoading ? "Saving..." : "Create Application"}
             </button>

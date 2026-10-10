@@ -97,7 +97,7 @@ export function JobDetailPage() {
               <Sparkles className="h-4 w-4" /> Ask AI
             </button>
             {applicationUrl && (
-              <a href={applicationUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-md bg-[var(--border-focus)] px-3 py-2 text-sm font-semibold text-white">
+              <a href={applicationUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-md bg-[var(--action-primary-bg)] px-3 py-2 text-sm font-semibold text-white">
                 Apply Now <ExternalLink className="h-4 w-4" />
               </a>
             )}

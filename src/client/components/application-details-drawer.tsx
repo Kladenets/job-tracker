@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Application, ApplicationStatus, UnifiedJobPosting } from "../../types/job-posting";
 import { APPLICATION_STAGE_DEFINITIONS } from "./application-stages";
 import {
@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Trash2,
 } from "lucide-react";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 
 interface ApplicationDetailsDrawerProps {
   application: Application | null;
@@ -44,6 +45,8 @@ export function ApplicationDetailsDrawer({
   const [nextActionDate, setNextActionDate] = useState("");
   const [appUrl, setAppUrl] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, { enabled: isOpen, onClose, initialFocusSelector: '[aria-label="Close drawer"]' });
 
   useEffect(() => {
     if (application) {
@@ -76,9 +79,11 @@ export function ApplicationDetailsDrawer({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Application details drawer"
+      aria-labelledby="application-details-title"
+      tabIndex={-1}
       className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-200"
     >
       <div className="w-full max-w-xl h-full bg-[var(--surface-base)] border-l border-[var(--border-subtle)] shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-250">
@@ -88,7 +93,7 @@ export function ApplicationDetailsDrawer({
             <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--border-focus)] font-mono-tabular">
               Application Lifecycle
             </span>
-            <h2 className="text-base font-bold text-[var(--text-primary)] truncate">
+            <h2 id="application-details-title" className="text-base font-bold text-[var(--text-primary)] truncate">
               {job?.title || "Role Application"}
             </h2>
             <p className="text-xs text-[var(--text-secondary)] truncate">
@@ -122,9 +127,10 @@ export function ApplicationDetailsDrawer({
                     key={stage.id}
                     type="button"
                     onClick={() => setCurrentStatus(stage.id)}
+                    aria-pressed={isActive}
                     className={`px-2 py-1.5 rounded-md text-xs font-semibold text-center border transition-all cursor-pointer ${
                       isActive
-                        ? "border-[var(--border-focus)] bg-[var(--border-focus)] text-white shadow-xs"
+                        ? "border-[var(--action-primary-bg)] bg-[var(--action-primary-bg)] text-white shadow-xs"
                         : "border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]"
                     }`}
                   >
@@ -138,7 +144,7 @@ export function ApplicationDetailsDrawer({
           {/* Dates & External Links */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)]">
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+              <label htmlFor="application-next-action" className="text-[11px] font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
                 <Calendar className="h-3 w-3 text-[var(--text-muted)]" />
                 Date Applied
               </label>
@@ -159,6 +165,7 @@ export function ApplicationDetailsDrawer({
                 Next Action Due
               </label>
               <input
+                id="application-next-action"
                 type="date"
                 value={nextActionDate}
                 onChange={(e) => setNextActionDate(e.target.value)}
@@ -167,12 +174,13 @@ export function ApplicationDetailsDrawer({
             </div>
 
             <div className="sm:col-span-2 space-y-1 pt-1 border-t border-[var(--border-subtle)]">
-              <label className="text-[11px] font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+              <label htmlFor="application-portal-url" className="text-[11px] font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
                 <ExternalLink className="h-3 w-3 text-[var(--text-muted)]" />
                 Direct Application / Portal URL
               </label>
               <div className="flex gap-2">
                 <input
+                  id="application-portal-url"
                   type="url"
                   value={appUrl}
                   onChange={(e) => setAppUrl(e.target.value)}
@@ -197,7 +205,7 @@ export function ApplicationDetailsDrawer({
           {/* User Interview & Compensation Notes */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+              <label htmlFor="application-notes" className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
                 <FileText className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 Interview & Preparation Notes
               </label>
@@ -206,6 +214,7 @@ export function ApplicationDetailsDrawer({
               </span>
             </div>
             <textarea
+              id="application-notes"
               rows={6}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -290,7 +299,7 @@ export function ApplicationDetailsDrawer({
               type="button"
               onClick={handleSave}
               disabled={isUpdating}
-              className="px-4 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+              className="px-4 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
             >
               {isSaved ? (
                 <>

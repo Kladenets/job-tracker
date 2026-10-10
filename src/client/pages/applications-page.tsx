@@ -273,7 +273,7 @@ export function ApplicationsPage() {
         </div>
         <Link
           to="/inbox"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
         >
           <Inbox className="h-4 w-4" />
           <span>Go to Recommendation Inbox</span>
@@ -322,6 +322,7 @@ export function ApplicationsPage() {
             <button
               type="button"
               onClick={() => setViewMode("kanban")}
+              aria-pressed={viewMode === "kanban"}
               title="Kanban Board View"
               aria-label="Kanban board view"
               className={`p-1.5 rounded transition-colors cursor-pointer ${
@@ -335,6 +336,7 @@ export function ApplicationsPage() {
             <button
               type="button"
               onClick={() => setViewMode("table")}
+              aria-pressed={viewMode === "table"}
               title="Table List View"
               aria-label="Table list view"
               className={`p-1.5 rounded transition-colors cursor-pointer ${
@@ -364,7 +366,7 @@ export function ApplicationsPage() {
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
-            className="self-start sm:self-auto px-3.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Application</span>
@@ -409,7 +411,7 @@ export function ApplicationsPage() {
               <button
                 type="button"
                 onClick={() => setIsAddModalOpen(true)}
-                className="px-3.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                className="px-3.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
               >
                 Add Application
               </button>

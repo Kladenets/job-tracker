@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   User,
   Mail,
@@ -25,6 +25,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { StructuredResume, ResumeSource } from "../../types/resume";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 
 export interface CandidateProfile {
   fullName: string;
@@ -76,6 +77,12 @@ export function CandidateProfileEditor({
   const [pendingFileContent, setPendingFileContent] = useState<string>("");
   const [pendingFileName, setPendingFileName] = useState<string>("");
   const [showSwitchWarning, setShowSwitchWarning] = useState(false);
+  const sourceDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(sourceDialogRef, {
+    enabled: isSourceModalOpen,
+    onClose: () => setIsSourceModalOpen(false),
+    initialFocusSelector: "[data-source-option]",
+  });
 
   // Syncing & Uploading spinners
   const [isSyncing, setIsSyncing] = useState(false);
@@ -281,7 +288,7 @@ export function CandidateProfileEditor({
           <button
             type="submit"
             disabled={isSaving || !isDirty}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs"
           >
             <Save className="h-3.5 w-3.5" />
             <span>{isSaving ? "Saving..." : "Save Profile"}</span>
@@ -602,7 +609,7 @@ export function CandidateProfileEditor({
       {/* ========================================================================= */}
       <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-2 shadow-xs">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-additional-experience" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Additional Experience & Unstructured Context
           </label>
@@ -611,13 +618,14 @@ export function CandidateProfileEditor({
           </span>
         </div>
         <textarea
+          id="candidate-additional-experience"
           rows={3}
           value={profile.additionalExperience || ""}
           onChange={(e) => setProfile({ ...profile, additionalExperience: e.target.value })}
           placeholder="Add any recent side projects, confidential systems, upcoming certifications, or context not yet on your official resume. The AI agent will incorporate this into fit scoring, interview prep, and cover letters..."
           className="w-full p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--border-focus)] transition-colors leading-relaxed"
         />
-        <p className="text-[11px] text-[var(--text-secondary)]">
+        <p className="rounded bg-[var(--surface-elevated)] text-[11px] text-[var(--text-secondary)]">
           Free-form notes here are appended to the candidate profile and evaluated by Gemini during deep match reviews.
         </p>
       </div>
@@ -628,11 +636,12 @@ export function CandidateProfileEditor({
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {/* Full Name */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-full-name" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <User className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Full Name
           </label>
           <input
+            id="candidate-full-name"
             type="text"
             required
             value={profile.fullName}
@@ -643,11 +652,12 @@ export function CandidateProfileEditor({
 
         {/* Email */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-email" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <Mail className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Email Address
           </label>
           <input
+            id="candidate-email"
             type="email"
             required
             value={profile.email}
@@ -658,11 +668,12 @@ export function CandidateProfileEditor({
 
         {/* Target Title */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-target-title" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <Briefcase className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Target Role Title
           </label>
           <input
+            id="candidate-target-title"
             type="text"
             required
             value={profile.targetTitle}
@@ -673,11 +684,12 @@ export function CandidateProfileEditor({
 
         {/* Years of Experience */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-years-experience" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <Award className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Years of Experience
           </label>
           <input
+            id="candidate-years-experience"
             type="number"
             min={0}
             max={40}
@@ -690,11 +702,12 @@ export function CandidateProfileEditor({
 
         {/* Location */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-location" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <MapPin className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Home Location / Perimeter
           </label>
           <input
+            id="candidate-location"
             type="text"
             value={profile.location || ""}
             onChange={(e) => setProfile({ ...profile, location: e.target.value })}
@@ -704,11 +717,12 @@ export function CandidateProfileEditor({
 
         {/* Workplace Preference */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="candidate-workplace-preference" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Workplace Preference
           </label>
           <select
+            id="candidate-workplace-preference"
             value={profile.remotePreference || "remote_or_hybrid"}
             onChange={(e) => setProfile({ ...profile, remotePreference: e.target.value })}
             className="w-full h-8.5 px-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)]"
@@ -742,6 +756,7 @@ export function CandidateProfileEditor({
               <button
                 type="button"
                 onClick={() => handleRemoveSkill(skill)}
+                aria-label={`Remove skill ${skill}`}
                 className="text-[var(--text-muted)] hover:text-[var(--status-danger-fg)] cursor-pointer"
               >
                 <X className="h-3 w-3" />
@@ -752,6 +767,7 @@ export function CandidateProfileEditor({
           <div className="inline-flex items-center gap-1">
             <input
               type="text"
+              aria-label="Add candidate skill"
               value={skillInput}
               onChange={(e) => setSkillInput(e.target.value)}
               onKeyDown={(e) => {
@@ -767,7 +783,7 @@ export function CandidateProfileEditor({
               <button
                 type="button"
                 onClick={() => handleAddSkill(skillInput)}
-                className="p-1 rounded bg-[var(--border-focus)] text-white hover:opacity-90 cursor-pointer"
+                className="p-1 rounded bg-[var(--action-primary-bg)] text-white hover:opacity-90 cursor-pointer"
               >
                 <Plus className="h-3 w-3" />
               </button>
@@ -781,18 +797,22 @@ export function CandidateProfileEditor({
       {/* ========================================================================= */}
       {isSourceModalOpen && (
         <div
+          ref={sourceDialogRef}
           role="dialog"
           aria-modal="true"
+          aria-labelledby="resume-source-dialog-title"
+          tabIndex={-1}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
           <div className="w-full max-w-md p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">
+              <h3 id="resume-source-dialog-title" className="text-sm font-bold text-[var(--text-primary)]">
                 Configure Resume Source
               </h3>
               <button
                 type="button"
                 onClick={() => setIsSourceModalOpen(false)}
+                aria-label="Close resume source dialog"
                 className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -802,18 +822,20 @@ export function CandidateProfileEditor({
             {/* Source Type Selector */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
+                data-source-option
                 type="button"
                 onClick={() => handleSelectSourceType("remote_url")}
+                aria-pressed={pendingSourceType === "remote_url"}
                 className={`p-3 rounded-lg border text-left flex items-start gap-2.5 cursor-pointer transition-colors ${
                   pendingSourceType === "remote_url"
                     ? "border-[var(--border-focus)] bg-[var(--surface-sunken)]"
-                    : "border-[var(--border-subtle)] bg-[var(--surface-base)] opacity-75"
+                    : "border-[var(--border-subtle)] bg-[var(--surface-base)]"
                 }`}
               >
                 <LinkIcon className="h-4 w-4 text-[var(--border-focus)] shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold text-[var(--text-primary)] block">Remote URL</span>
-                  <span className="text-[11px] text-[var(--text-secondary)]">
+                  <span className="rounded bg-[var(--surface-base)] text-[11px] text-[var(--text-secondary)]">
                     GitHub Gist or live JSON endpoint
                   </span>
                 </div>
@@ -822,16 +844,17 @@ export function CandidateProfileEditor({
               <button
                 type="button"
                 onClick={() => handleSelectSourceType("file_upload")}
+                aria-pressed={pendingSourceType === "file_upload"}
                 className={`p-3 rounded-lg border text-left flex items-start gap-2.5 cursor-pointer transition-colors ${
                   pendingSourceType === "file_upload"
                     ? "border-[var(--border-focus)] bg-[var(--surface-sunken)]"
-                    : "border-[var(--border-subtle)] bg-[var(--surface-base)] opacity-75"
+                    : "border-[var(--border-subtle)] bg-[var(--surface-base)]"
                 }`}
               >
                 <Upload className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold text-[var(--text-primary)] block">Upload JSON Resume</span>
-                  <span className="text-[11px] text-[var(--text-secondary)]">
+                  <span className="rounded bg-[var(--surface-base)] text-[11px] text-[var(--text-secondary)]">
                     JSON Resume format (.json)
                   </span>
                 </div>
@@ -855,10 +878,11 @@ export function CandidateProfileEditor({
             {/* Input according to selected type */}
             {pendingSourceType === "remote_url" ? (
               <div className="space-y-1.5 text-xs">
-                <label className="font-semibold text-[var(--text-primary)]">
+                <label htmlFor="resume-source-url" className="font-semibold text-[var(--text-primary)]">
                   Public Resume URL
                 </label>
                 <input
+                  id="resume-source-url"
                   type="url"
                   required
                   value={pendingUrl}
@@ -872,10 +896,11 @@ export function CandidateProfileEditor({
               </div>
             ) : (
               <div className="space-y-2 text-xs">
-                <label className="font-semibold text-[var(--text-primary)]">
+                <label htmlFor="resume-source-file" className="font-semibold text-[var(--text-primary)]">
                   Select JSON Resume File
                 </label>
                 <input
+                  id="resume-source-file"
                   type="file"
                   accept=".json,application/json"
                   onChange={handleFileChange}
@@ -902,7 +927,7 @@ export function CandidateProfileEditor({
                 type="button"
                 onClick={handleConfirmSourceChange}
                 disabled={pendingSourceType === "remote_url" ? !pendingUrl.trim() : !pendingFileContent}
-                className="px-4 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs"
+                className="px-4 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs"
               >
                 Confirm Source
               </button>

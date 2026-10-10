@@ -98,7 +98,7 @@ export function ApplicationCard({
     >
       {/* Top Header: Company, Title & Direct Link */}
       <div className="flex items-start justify-between gap-2">
-        <div className="space-y-0.5 min-w-0 flex-1 cursor-pointer" onClick={onClick}>
+        <div className="space-y-0.5 min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-secondary)] truncate">
             <Building2 className="h-3 w-3 text-[var(--text-muted)] shrink-0" />
             <span className="truncate">{job?.company || "Company"}</span>
@@ -151,7 +151,6 @@ export function ApplicationCard({
       {/* User Notes Preview (if available) */}
       {application.user_notes && (
         <p
-          onClick={onClick}
           className="text-[11px] text-[var(--text-secondary)] line-clamp-2 bg-[var(--surface-elevated)] p-2 rounded border border-[var(--border-subtle)] leading-relaxed italic cursor-pointer"
         >
           "{application.user_notes}"
@@ -183,6 +182,7 @@ export function ApplicationCard({
                 e.stopPropagation();
                 onAskAI();
               }}
+              aria-label={`Ask AI about interview preparation for ${job?.title || "this application"}`}
               title="Ask AI about interview prep"
               className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--border-focus)] hover:bg-[var(--surface-sunken)] transition-colors cursor-pointer"
             >
@@ -194,6 +194,7 @@ export function ApplicationCard({
             type="button"
             onClick={onClick}
             title="View details & stage history"
+            aria-label={`View notes and stage history for ${job?.title || "this application"}`}
             className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)] transition-colors cursor-pointer flex items-center gap-0.5 text-[10px] font-medium"
           >
             <span>Notes</span>

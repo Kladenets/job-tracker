@@ -370,12 +370,25 @@ export function InboxPage() {
       // Active focused job
       const currentJob = sortedJobs[focusedIndex];
 
+      const moveFocusTo = (index: number) => {
+        const job = sortedJobs[index];
+        if (!job) return;
+        setFocusedIndex(index);
+        requestAnimationFrame(() => {
+          const card = document.querySelector<HTMLElement>(`[data-job-id="${CSS.escape(job.id)}"]`);
+          card?.focus({ preventScroll: true });
+          card?.scrollIntoView({ block: "nearest" });
+        });
+      };
+
       if (e.key === "j" || e.key === "ArrowDown") {
+        if (sortedJobs.length === 0) return;
         e.preventDefault();
-        setFocusedIndex((prev) => Math.min(prev + 1, sortedJobs.length - 1));
+        moveFocusTo(Math.min(focusedIndex + 1, sortedJobs.length - 1));
       } else if (e.key === "k" || e.key === "ArrowUp") {
+        if (sortedJobs.length === 0) return;
         e.preventDefault();
-        setFocusedIndex((prev) => Math.max(prev - 1, 0));
+        moveFocusTo(Math.max(focusedIndex - 1, 0));
       } else if (currentJob) {
         if (e.key === "s") {
           e.preventDefault();
@@ -445,6 +458,7 @@ export function InboxPage() {
           ]}
           filterCount={activeFilterCount}
           onToggleFilters={() => setIsFilterPopoverOpen(!isFilterPopoverOpen)}
+          filtersOpen={isFilterPopoverOpen}
           onSync={() => syncMutation.mutate()}
           isSyncing={syncMutation.isPending}
         />
@@ -518,7 +532,7 @@ export function InboxPage() {
             <button
               type="button"
               onClick={() => refetch()}
-              className="px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold cursor-pointer"
+              className="px-3 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold cursor-pointer"
             >
               Retry
             </button>

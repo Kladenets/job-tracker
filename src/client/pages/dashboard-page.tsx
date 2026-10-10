@@ -112,7 +112,7 @@ export function DashboardPage() {
         </div>
         <Link
           to="/inbox"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
         >
           <Inbox className="h-4 w-4" />
           <span>Return to Recommendation Inbox</span>

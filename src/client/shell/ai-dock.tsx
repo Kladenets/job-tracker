@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAIDockStore, ConversationSummary } from "./ai-dock-store";
 import { useShellStore } from "./shell-store";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 
 export function AIDock() {
   const userRole = useShellStore((state) => state.userRole);
@@ -44,8 +45,25 @@ export function AIDock() {
 
   const [input, setInput] = useState("");
   const [listSearch, setListSearch] = useState("");
+  const [isOverlayViewport, setIsOverlayViewport] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const dockRef = useRef<HTMLElement>(null);
+  const isModal = isOpen && isOverlayViewport;
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1279px)");
+    const updateViewport = () => setIsOverlayViewport(media.matches);
+    updateViewport();
+    media.addEventListener("change", updateViewport);
+    return () => media.removeEventListener("change", updateViewport);
+  }, []);
+
+  useDialogFocus(dockRef, {
+    enabled: isModal,
+    onClose: () => setIsOpen(false),
+    initialFocusSelector: dockView === "chat" ? "textarea" : '[aria-label="Start new conversation"]',
+  });
 
   // Fetch conversations on initial mount and when opened
   useEffect(() => {
@@ -142,6 +160,7 @@ export function AIDock() {
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
+          data-dialog-backdrop
           className="xl:hidden fixed inset-0 bg-black/40 backdrop-blur-xs z-30 transition-opacity duration-300"
           aria-hidden="true"
         />
@@ -154,15 +173,27 @@ export function AIDock() {
         - Height of header: strictly standard h-13 (52px / 3.25rem) matching navigation rail & sticky filter bar.
       */}
       <aside
-        aria-label="AI Assistant Dock"
+        ref={dockRef}
+        id="ai-assistant-dock"
+        role={isModal ? "dialog" : undefined}
+        aria-modal={isModal || undefined}
+        aria-labelledby={isModal ? "ai-dock-title" : undefined}
+        aria-label={isModal ? undefined : "AI Assistant Dock"}
+        tabIndex={isModal ? -1 : undefined}
+        inert={!isOpen}
         className={`fixed top-0 bottom-0 right-0 z-40 xl:static flex flex-col bg-[var(--surface-elevated)] border-l border-[var(--border-subtle)] shadow-xl xl:shadow-none transition-all duration-300 ease-in-out shrink-0 overflow-hidden ${
           isOpen
-            ? "translate-x-0 w-[90vw] sm:w-[24rem] xl:w-[24rem]"
+            ? "translate-x-0 w-screen md:w-[24rem] xl:w-[24rem]"
             : "translate-x-full xl:translate-x-0 xl:w-0 border-l-0"
         }`}
       >
         {/* Fixed 384px inner container prevents text reflow during animations */}
-        <div className="w-[90vw] sm:w-[24rem] xl:w-[24rem] h-full flex flex-col shrink-0 overflow-hidden">
+        <div className="w-screen md:w-[24rem] xl:w-[24rem] h-full flex flex-col shrink-0 overflow-hidden">
+          {isModal && (
+            <div className="md:hidden flex h-4 shrink-0 items-start justify-center pt-1" aria-hidden="true">
+              <span className="h-1 w-8 rounded-full bg-[var(--border-strong)]" />
+            </div>
+          )}
           {/* ========================================================================= */}
           {/* VIEW 1: CONVERSATIONS DIRECTORY                                           */}
           {/* ========================================================================= */}
@@ -184,18 +215,21 @@ export function AIDock() {
 
                   <div className="truncate">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold tracking-tight block truncate text-[var(--text-primary)]">
+                        <span id="ai-dock-title" className="text-xs font-bold tracking-tight block truncate text-[var(--text-primary)]">
                         AI Conversations
                       </span>
                       {/* Connection / Generation Status Indicator Pill */}
                       <span
                         data-testid="ai-status-badge-expanded"
                         data-status={isGenerating ? "generating" : "ready"}
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
                         title={isGenerating ? "Agent is currently generating response" : "Agent online and ready"}
                         className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[9px] font-mono-tabular font-semibold shrink-0 ${
                           isGenerating
-                            ? "bg-amber-500/10 border-amber-500/30 text-amber-500"
-                            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+                            ? "bg-[var(--status-marginal-bg)] border-[var(--status-marginal-fg)]/30 text-[var(--status-marginal-fg)]"
+                            : "bg-[var(--status-recommended-bg)] border-[var(--status-recommended-fg)]/30 text-[var(--status-recommended-fg)]"
                         }`}
                       >
                         <span
@@ -219,7 +253,7 @@ export function AIDock() {
                     disabled={isGenerating}
                     title="Start new conversation"
                     aria-label="Start new conversation"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>New</span>
@@ -233,6 +267,7 @@ export function AIDock() {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-muted)]" />
                   <input
                     type="text"
+                    aria-label="Search conversations and jobs"
                     value={listSearch}
                     onChange={(e) => setListSearch(e.target.value)}
                     placeholder="Search conversations & jobs..."
@@ -265,7 +300,7 @@ export function AIDock() {
                     <button
                       type="button"
                       onClick={() => startNewConversation()}
-                      className="px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-medium cursor-pointer"
+                      className="px-3 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-medium cursor-pointer"
                     >
                       Start First Conversation
                     </button>
@@ -276,51 +311,55 @@ export function AIDock() {
                     return (
                       <div
                         key={conv.id}
-                        onClick={() => selectConversation(conv.id)}
-                        aria-disabled={isGenerating}
-                        className={`group relative rounded-lg border p-2.5 text-xs transition-all cursor-pointer ${
+                        className={`group relative rounded-lg border p-2.5 text-xs transition-all ${
                           isActive
                             ? "border-[var(--border-focus)] bg-[var(--surface-sunken)] shadow-xs"
                             : "border-[var(--border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-sunken)]/60"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-bold text-[var(--text-primary)] truncate block flex-1">
-                            {conv.title}
-                          </span>
-                          <span className="text-[10px] font-mono-tabular text-[var(--text-muted)] shrink-0 flex items-center gap-1">
-                            <Clock className="h-2.5 w-2.5" />
-                            {new Date(conv.updated_at).toLocaleDateString([], {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
-                        </div>
-
-                        {/* Last message snippet preview */}
-                        {conv.lastMessageSnippet && (
-                          <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1 mt-1 font-sans">
-                            {conv.lastMessageSnippet}
-                          </p>
-                        )}
-
-                        {/* Referenced Job Pills with hover tooltip */}
-                        {conv.referencedJobs && conv.referencedJobs.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1 items-center">
-                            {conv.referencedJobs.map((job) => (
-                              <span
-                                key={job.id}
-                                title={`${job.title} at ${job.company}`}
-                                className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-focus)] transition-colors"
-                              >
-                                <Briefcase className="h-2.5 w-2.5 text-[var(--border-focus)] shrink-0" />
-                                <span className="truncate max-w-[12rem]">
-                                  {job.company}: {job.title.slice(0, 16)}...
-                                </span>
-                              </span>
-                            ))}
+                        <button
+                          type="button"
+                          disabled={isGenerating}
+                          onClick={() => void selectConversation(conv.id)}
+                          aria-label={`Open conversation ${conv.title}`}
+                          className="w-full text-left disabled:cursor-not-allowed"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-bold text-[var(--text-primary)] truncate block flex-1">
+                              {conv.title}
+                            </span>
+                            <span className="text-[10px] font-mono-tabular text-[var(--text-muted)] shrink-0 flex items-center gap-1">
+                              <Clock className="h-2.5 w-2.5" />
+                              {new Date(conv.updated_at).toLocaleDateString([], {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
                           </div>
-                        )}
+
+                          {conv.lastMessageSnippet && (
+                            <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1 mt-1 font-sans">
+                              {conv.lastMessageSnippet}
+                            </p>
+                          )}
+
+                          {conv.referencedJobs && conv.referencedJobs.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1 items-center">
+                              {conv.referencedJobs.map((job) => (
+                                <span
+                                  key={job.id}
+                                  title={`${job.title} at ${job.company}`}
+                                  className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                                >
+                                  <Briefcase className="h-2.5 w-2.5 text-[var(--border-focus)] shrink-0" />
+                                  <span className="truncate max-w-[12rem]">
+                                    {job.company}: {job.title.slice(0, 16)}...
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
 
                         {/* Delete button (hover only) */}
                         <button
@@ -334,7 +373,7 @@ export function AIDock() {
                             disabled={isGenerating}
                           title="Delete conversation"
                           aria-label="Delete conversation"
-                          className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 p-1 rounded hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger-fg)] text-[var(--text-muted)] transition-all cursor-pointer disabled:cursor-not-allowed"
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 absolute bottom-2 right-2 p-1 rounded hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger-fg)] text-[var(--text-muted)] transition-all cursor-pointer disabled:cursor-not-allowed"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -376,18 +415,21 @@ export function AIDock() {
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-xs font-bold tracking-tight block truncate text-[var(--text-primary)]">
+                      <span id="ai-dock-title" className="text-xs font-bold tracking-tight block truncate text-[var(--text-primary)]">
                         {activeConversation?.title || "AI Assistant Thread"}
                       </span>
                       {/* Connection / Generation Status Indicator Pill */}
                       <span
                         data-testid="ai-status-badge-chat"
                         data-status={isGenerating ? "generating" : "ready"}
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
                         title={isGenerating ? "Agent is currently generating response" : "Agent online and ready"}
                         className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[9px] font-mono-tabular font-semibold shrink-0 ${
                           isGenerating
-                            ? "bg-amber-500/10 border-amber-500/30 text-amber-500"
-                            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+                            ? "bg-[var(--status-marginal-bg)] border-[var(--status-marginal-fg)]/30 text-[var(--status-marginal-fg)]"
+                            : "bg-[var(--status-recommended-bg)] border-[var(--status-recommended-fg)]/30 text-[var(--status-recommended-fg)]"
                         }`}
                       >
                         <span
@@ -415,7 +457,7 @@ export function AIDock() {
                     disabled={isGenerating}
                     title="Start new conversation"
                     aria-label="Start new conversation"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>New</span>
@@ -463,7 +505,7 @@ export function AIDock() {
                       <div
                         className={`max-w-[88%] rounded-lg p-3 text-xs leading-relaxed break-words whitespace-pre-wrap ${
                           isUser
-                            ? "bg-[var(--border-focus)] text-white font-medium"
+                            ? "bg-[var(--action-primary-bg)] text-white font-medium"
                             : "bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-primary)]"
                         }`}
                       >
@@ -563,6 +605,7 @@ export function AIDock() {
                 <div className="relative rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] focus-within:border-[var(--border-focus)] focus-within:ring-1 focus-within:ring-[var(--border-focus)] transition-all">
                   <textarea
                     ref={inputRef}
+                    aria-label="Message the AI assistant"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDownInput}
@@ -581,7 +624,7 @@ export function AIDock() {
                       type="submit"
                       disabled={!input.trim() || isGenerating}
                       aria-label="Send message"
-                      className="inline-flex items-center justify-center h-6 w-6 rounded bg-[var(--border-focus)] text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded bg-[var(--action-primary-bg)] text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
                     >
                       <Send className="h-3 w-3" />
                     </button>

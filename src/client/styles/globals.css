@@ -17,6 +17,7 @@
     --border-subtle: #e2e8f0;
     --border-strong: #cbd5e1;
     --border-focus: #2563eb;
+    --action-primary-bg: #2563eb;
 
     /* Functional Semantic Statuses */
     --status-recommended-fg: #15803d;
@@ -64,6 +65,7 @@
     --border-subtle: #1e293b;
     --border-strong: #334155;
     --border-focus: #3b82f6;
+    --action-primary-bg: #1d4ed8;
 
     /* Functional Semantic Statuses */
     --status-recommended-fg: #4ade80;
@@ -88,8 +90,8 @@
 
   /* Accessible focus indicators: only visible for keyboard navigation */
   :focus-visible {
-    outline: 2px solid var(--border-focus);
-    outline-offset: 2px;
+    outline: 2px solid var(--border-focus) !important;
+    outline-offset: 2px !important;
   }
 
   /* Monospace tabular numbers helper */
@@ -113,5 +115,27 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  button,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  a.inline-flex {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    min-height: 44px;
+  }
+
+  article a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }

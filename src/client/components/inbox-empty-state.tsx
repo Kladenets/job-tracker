@@ -38,7 +38,7 @@ export function InboxEmptyState({
           <button
             type="button"
             onClick={onResetFilters}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
             <span>Reset All Filters</span>
@@ -70,7 +70,7 @@ export function InboxEmptyState({
             type="button"
             onClick={onTriggerSync}
             disabled={isSyncing}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
             <span>{isSyncing ? "Crawling Sources..." : "Run Discovery Now"}</span>
@@ -103,7 +103,7 @@ export function InboxEmptyState({
             type="button"
             onClick={onTriggerSync}
             disabled={isSyncing}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
             <span>{isSyncing ? "Starting Discovery..." : "Run Discovery Now"}</span>

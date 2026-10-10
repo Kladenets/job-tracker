@@ -252,7 +252,7 @@ export function SearchProfileEditor({
           <button
             type="submit"
             disabled={isSaving || !isDirty}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs"
           >
             <Save className="h-3.5 w-3.5" />
             <span>{isSaving ? "Saving..." : "Save Rules"}</span>
@@ -281,6 +281,7 @@ export function SearchProfileEditor({
               <button
                 type="button"
                 onClick={() => handleRemoveTitle(t)}
+                aria-label={`Remove target title ${t}`}
                 className="text-[var(--text-muted)] hover:text-[var(--status-danger-fg)] cursor-pointer"
               >
                 <X className="h-3 w-3" />
@@ -306,7 +307,7 @@ export function SearchProfileEditor({
               <button
                 type="button"
                 onClick={handleAddTitle}
-                className="p-1 rounded bg-[var(--border-focus)] text-white hover:opacity-90 cursor-pointer"
+                className="p-1 rounded bg-[var(--action-primary-bg)] text-white hover:opacity-90 cursor-pointer"
               >
                 <Plus className="h-3 w-3" />
               </button>
@@ -357,7 +358,7 @@ export function SearchProfileEditor({
 
         {/* Compensation Floor */}
         <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-3">
-          <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          <label htmlFor="search-minimum-salary" className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
             <DollarSign className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             Minimum Annual Salary Floor
           </label>
@@ -367,6 +368,7 @@ export function SearchProfileEditor({
                 $
               </span>
               <input
+                id="search-minimum-salary"
                 type="number"
                 step={5000}
                 min={0}
@@ -442,6 +444,7 @@ export function SearchProfileEditor({
             <div className="flex items-center gap-2">
               <input
                 type="text"
+                aria-label="Target city"
                 value={profile.discovery.targetLocation.city}
                 onChange={(e) =>
                   setProfile({
@@ -457,6 +460,7 @@ export function SearchProfileEditor({
               />
               <input
                 type="text"
+                aria-label="Target state"
                 value={profile.discovery.targetLocation.state}
                 onChange={(e) =>
                   setProfile({
@@ -545,6 +549,7 @@ export function SearchProfileEditor({
                 <button
                   type="button"
                   onClick={() => handleRemoveExcludedKeyword(kw)}
+                  aria-label={`Remove excluded title keyword ${kw}`}
                   className="hover:opacity-75 cursor-pointer"
                 >
                   <X className="h-2.5 w-2.5" />
@@ -556,6 +561,7 @@ export function SearchProfileEditor({
           <div className="flex items-center gap-1 pt-1">
             <input
               type="text"
+              aria-label="Add excluded title keyword"
               value={newExcludedKeyword}
               onChange={(e) => setNewExcludedKeyword(e.target.value)}
               onKeyDown={(e) => {
@@ -597,6 +603,7 @@ export function SearchProfileEditor({
                 <button
                   type="button"
                   onClick={() => handleRemoveExcludedCompany(comp)}
+                  aria-label={`Remove excluded company ${comp}`}
                   className="hover:opacity-75 cursor-pointer"
                 >
                   <X className="h-2.5 w-2.5" />
@@ -608,6 +615,7 @@ export function SearchProfileEditor({
           <div className="flex items-center gap-1 pt-1">
             <input
               type="text"
+              aria-label="Add excluded company"
               value={newExcludedCompany}
               onChange={(e) => setNewExcludedCompany(e.target.value)}
               onKeyDown={(e) => {
@@ -735,7 +743,7 @@ export function SearchProfileEditor({
       {/* JEV Qualification Threshold */}
       <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h3 className="text-xs font-bold text-[var(--text-primary)]">
+          <h3 id="jev-threshold-label" className="text-xs font-bold text-[var(--text-primary)]">
             JEV Recommendation Confidence Threshold
           </h3>
           <p className="text-[11px] text-[var(--text-secondary)]">
@@ -746,6 +754,7 @@ export function SearchProfileEditor({
         <div className="flex items-center gap-3">
           <input
             type="range"
+            aria-labelledby="jev-threshold-label"
             min={0.50}
             max={0.95}
             step={0.05}

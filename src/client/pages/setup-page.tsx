@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
 import { StickyFilterBar } from "../components/sticky-filter-bar";
@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 
 export function SetupPage() {
   const queryClient = useQueryClient();
@@ -30,6 +31,7 @@ export function SetupPage() {
   const [isRulesDirty, setIsRulesDirty] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const hasUnsavedChanges = isProfileDirty || isRulesDirty;
+  const blockerDialogRef = useRef<HTMLDivElement>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -40,6 +42,11 @@ export function SetupPage() {
     shouldBlockFn: ({ current, next }) => hasUnsavedChanges && current.pathname !== next.pathname,
     withResolver: true,
     enableBeforeUnload: hasUnsavedChanges,
+  });
+  useDialogFocus(blockerDialogRef, {
+    enabled: navigationBlocker.status === "blocked",
+    onClose: navigationBlocker.reset,
+    initialFocusSelector: '[data-blocker-stay="true"]',
   });
 
   // 1. Fetch Candidate Profile & Structured Resume
@@ -173,7 +180,7 @@ export function SetupPage() {
         </div>
         <Link
           to="/inbox"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
         >
           <Inbox className="h-4 w-4" />
           <span>Return to Recommendation Inbox</span>
@@ -293,13 +300,13 @@ export function SetupPage() {
 
       {navigationBlocker.status === "blocked" && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="unsaved-setup-title" className="w-full max-w-md rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-5 space-y-4 shadow-xl">
+          <div ref={blockerDialogRef} role="dialog" aria-modal="true" aria-labelledby="unsaved-setup-title" tabIndex={-1} className="w-full max-w-md rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-5 space-y-4 shadow-xl">
             <div className="space-y-1">
               <h2 id="unsaved-setup-title" className="font-semibold text-[var(--text-primary)]">Discard unsaved changes?</h2>
               <p className="text-sm text-[var(--text-secondary)]">Your candidate profile or search rules have unsaved edits.</p>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={navigationBlocker.reset} className="rounded border border-[var(--border-subtle)] px-3 py-2 text-sm">Stay</button>
+              <button type="button" data-blocker-stay="true" onClick={navigationBlocker.reset} className="rounded border border-[var(--border-subtle)] px-3 py-2 text-sm">Stay</button>
               <button
                 type="button"
                 onClick={() => {

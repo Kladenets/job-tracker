@@ -276,7 +276,7 @@ export function DiscoveryRunsPanel({
             <button
               type="submit"
               disabled={isIngestingUrl || !jobUrl.trim()}
-              className="h-9 px-4 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+              className="h-9 px-4 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
             >
               {isIngestingUrl ? (
                 <>
@@ -372,7 +372,7 @@ export function DiscoveryRunsPanel({
             type="button"
             onClick={handleRunDiscovery}
             disabled={isRunningDiscovery || selectedSources.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs shrink-0"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs shrink-0"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRunningDiscovery ? "animate-spin" : ""}`} />
             <span>{isRunningDiscovery ? "Running Discovery..." : "Run Discovery Pipeline Now"}</span>

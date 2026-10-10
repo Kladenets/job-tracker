@@ -31,7 +31,7 @@
 #### Tier 2: Expanded In-Depth Drawer / Card (~12rem–16rem height)
 - Toggled via row click, chevron, or `Space`/`Enter` key:
   - **Fluid Height Accordion Animation:** Animated using CSS grid transition (`grid-rows-[0fr]` to `grid-rows-[1fr]`, `opacity-0` to `opacity-100`, `300ms ease-out`).
-  - **Deterministic Rule Audit:** Clear check/cross breakdown of qualification rules (✅ Experience $\ge 6$ yrs, ✅ Remote US, ⚠️ Salary unlisted).
+  - **Evidence-Backed Filter Audit:** Show only matched-rule evidence recorded for the posting; do not infer or fabricate pass/fail checks from the current candidate profile. If audit evidence is absent, display an explicit unavailable state.
   - **Extracted Tech Keywords:** Monospace skills tags (`TypeScript`, `Distributed Systems`, `PostgreSQL`).
   - **Role Overview:** Clean snippet of core responsibilities.
   - **Dismissed & Restore Actions:** Dismissed jobs in the Dismissed tab render with a `Restore` button (`RotateCcw`) to reinstate them back to the active recommendation queue (`job_status = 'discovered'`).

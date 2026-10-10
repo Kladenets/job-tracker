@@ -53,6 +53,7 @@ export function AITopBarButton({ className = "", forceShowWhenOpen = false }: AI
         title={`AI Assistant (${statusDesc.label}) - ⌘K or c`}
         aria-label={`Toggle AI Assistant (${statusDesc.label})`}
         aria-expanded={isOpen}
+        aria-controls="ai-assistant-dock"
         className="relative inline-flex items-center justify-center h-8 md:h-9 px-2.5 transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]"
       >
         <Sparkles className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isGenerating ? "animate-spin text-amber-500" : ""}`} />

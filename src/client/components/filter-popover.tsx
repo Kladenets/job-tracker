@@ -25,13 +25,16 @@ export function FilterPopover({
 
   return (
     <div
+      id="inbox-filter-popover"
       data-testid="filter-popover"
+      role="dialog"
+      aria-labelledby="filter-popover-title"
       className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] shadow-xl z-50 p-3.5 space-y-3.5 text-xs text-[var(--text-primary)]"
     >
       <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2">
         <div className="flex items-center gap-1.5 font-bold">
           <Filter className="h-3.5 w-3.5 text-[var(--border-focus)]" />
-          <span>Advanced Criteria</span>
+          <span id="filter-popover-title">Advanced Criteria</span>
         </div>
         <button
           type="button"
@@ -58,7 +61,7 @@ export function FilterPopover({
                 onClick={() => onChange({ ...criteria, workplaceType: type })}
                 className={`py-1 px-1.5 text-center capitalize rounded border text-[11px] font-medium transition-colors cursor-pointer ${
                   isSelected
-                    ? "border-[var(--border-focus)] bg-[var(--border-focus)] text-white font-semibold"
+                    ? "border-[var(--action-primary-bg)] bg-[var(--action-primary-bg)] text-white font-semibold"
                     : "border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)]"
                 }`}
               >
@@ -76,6 +79,7 @@ export function FilterPopover({
             Source Origin
           </label>
           <select
+            aria-label="Source origin"
             value={criteria.source}
             onChange={(e) => onChange({ ...criteria, source: e.target.value })}
             className="w-full px-2 py-1.5 rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] cursor-pointer"
@@ -127,7 +131,7 @@ export function FilterPopover({
         <button
           type="button"
           onClick={onClose}
-          className="px-3 py-1 rounded bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+          className="px-3 py-1 rounded bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
         >
           Done
         </button>

@@ -79,7 +79,15 @@ export function JobCard({
     <article
       data-testid="job-card"
       data-job-id={job.id}
-      aria-expanded={isExpanded}
+      aria-label={`Job: ${job.title} at ${job.company}`}
+      tabIndex={isFocused ? 0 : -1}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setIsExpanded((expanded) => !expanded);
+        }
+      }}
       className={`@container rounded-lg border transition-all duration-200 overflow-hidden ${
         isDismissed
           ? "opacity-75 bg-[var(--surface-sunken)]/50 border-[var(--border-subtle)] hover:opacity-100"
@@ -92,14 +100,13 @@ export function JobCard({
       {/* TIER 1: COLLAPSED SCAN ROW (~4rem / 64px)                                 */}
       {/* ========================================================================= */}
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="p-3 md:p-4 cursor-pointer hover:bg-[var(--surface-sunken)]/40 transition-colors select-none"
+        className="p-3 md:p-4 hover:bg-[var(--surface-sunken)]/40 transition-colors"
       >
         <div className="flex flex-col @[600px]:flex-row @[600px]:items-center justify-between gap-3">
           {/* Left Block: Arc Percentage Ring + Title & Zero-Pill Typography */}
           <div className="flex items-start gap-3 min-w-0 flex-1">
             {fitScore === null ? (
-              <span className="w-[38px] shrink-0 text-center text-[9px] font-semibold leading-tight text-[var(--text-muted)]" aria-label="Fit score unavailable">
+              <span className="w-[38px] shrink-0 text-center text-[9px] font-semibold leading-tight text-[var(--text-muted)]">
                 Unscored
               </span>
             ) : (
@@ -172,7 +179,7 @@ export function JobCard({
               onClick={() => onAskAI(job)}
               title="Ask AI about this job (c or ⌘K)"
               aria-label={`Ask AI about ${job.title} at ${job.company}`}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-[var(--status-marginal-fg)]/30 bg-[var(--status-marginal-bg)] text-[var(--status-marginal-fg)] hover:opacity-90 text-xs font-semibold transition-colors cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span className="hidden @[480px]:inline">Ask AI</span>
@@ -225,7 +232,7 @@ export function JobCard({
               onClick={() => onApply(job)}
               title="Open verified direct ATS application (a)"
               aria-label={`Apply direct to ${job.company}`}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-2xs"
             >
               <span>Apply</span>
               <ExternalLink className="h-3 w-3" />
@@ -238,6 +245,8 @@ export function JobCard({
                 e.stopPropagation();
                 setIsExpanded(!isExpanded);
               }}
+              aria-expanded={isExpanded}
+              aria-controls={`job-details-${job.id}`}
               title={isExpanded ? "Collapse details" : "Expand audit details"}
               aria-label={isExpanded ? "Collapse details" : "Expand audit details"}
               className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)] cursor-pointer"
@@ -259,7 +268,10 @@ export function JobCard({
       {/* TIER 2: EXPANDED IN-DEPTH DRAWER WITH ACCORDION ANIMATION                 */}
       {/* ========================================================================= */}
       <div
+        id={`job-details-${job.id}`}
         data-testid="job-card-expanded-drawer"
+        aria-hidden={!isExpanded}
+        inert={!isExpanded}
         className={`grid transition-all duration-300 ease-out border-t border-[var(--border-subtle)] bg-[var(--surface-base)]/50 ${
           isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0 border-t-transparent pointer-events-none"
         }`}
@@ -270,47 +282,28 @@ export function JobCard({
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 font-bold text-xs text-[var(--text-primary)]">
                 <ShieldCheck className="h-3.5 w-3.5 text-[var(--border-focus)]" />
-                <span>Deterministic Qualification Audit</span>
+                <span>Deterministic Filter Audit</span>
               </div>
 
-              <div className="grid grid-cols-1 @[600px]:grid-cols-3 gap-2">
-                {/* Experience Rule */}
-                <div className="p-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-1">
-                  <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                    <Check className="h-3.5 w-3.5 text-[var(--status-recommended-fg)]" />
-                    <span>Target Experience</span>
-                  </div>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    Candidate profile: 6+ yrs · Role seniority: {job.seniority || "Mid/Senior"}
-                  </p>
-                </div>
-
-                {/* Workplace & Location Rule */}
-                <div className="p-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-1">
-                  <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                    <Check className="h-3.5 w-3.5 text-[var(--status-recommended-fg)]" />
-                    <span>Location Eligibility</span>
-                  </div>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    {job.location || "Remote US"} ({job.workplace_type || "Verified"})
-                  </p>
-                </div>
-
-                {/* Compensation Rule */}
-                <div className="p-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-1">
-                  <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                    {job.salary_min_annual ? (
-                      <Check className="h-3.5 w-3.5 text-[var(--status-recommended-fg)]" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                    )}
-                    <span>Salary Threshold</span>
-                  </div>
-                  <p className="text-[10px] text-[var(--text-muted)]">
-                    {job.salary_min_annual ? `${formatSalary()} meets target` : "Salary unlisted by employer"}
-                  </p>
-                </div>
-              </div>
+              {job.crawler_data?.matched_rules?.length ? (
+                <ul className="grid grid-cols-1 @[600px]:grid-cols-2 gap-2">
+                  {job.crawler_data.matched_rules.map((rule, index) => (
+                    <li key={`${rule.rule_id}-${index}`} className="p-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-[11px]">
+                        {rule.passed
+                          ? <Check className="h-3.5 w-3.5 text-[var(--status-recommended-fg)]" aria-hidden="true" />
+                          : <AlertTriangle className="h-3.5 w-3.5 text-[var(--status-marginal-fg)]" aria-hidden="true" />}
+                        <span>{rule.rule_id.replaceAll("_", " ")}</span>
+                      </div>
+                      <p className="text-[10px] text-[var(--text-muted)]">
+                        {rule.passed ? "Passed" : "Did not pass"}{rule.evidence ? ` · ${rule.evidence}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-[var(--text-muted)]">Filter audit evidence is unavailable for this posting.</p>
+              )}
             </div>
 
             {/* 2. Extracted Tech Keywords */}
@@ -383,9 +376,9 @@ export function JobCard({
                 <button
                   type="button"
                   onClick={() => onApply(job)}
-                  className="px-3.5 py-1.5 rounded-md bg-[var(--border-focus)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 rounded-md bg-[var(--action-primary-bg)] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs flex items-center gap-1.5"
                 >
-                  <span>Apply on {job.source.toUpperCase()}</span>
+                  <span>Open application link</span>
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>
               </div>

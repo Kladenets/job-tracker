@@ -64,7 +64,12 @@ export function SourceBreakdownTable({ sources }: SourceBreakdownTableProps) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        role="region"
+        aria-label="Source channel effectiveness table"
+        tabIndex={0}
+      >
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]/50 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider font-mono-tabular">

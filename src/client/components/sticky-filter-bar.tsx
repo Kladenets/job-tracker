@@ -17,6 +17,7 @@ interface FilterBarProps {
   sortOptions?: { id: string; label: string }[];
   filterCount?: number;
   onToggleFilters?: () => void;
+  filtersOpen?: boolean;
   showAIButton?: boolean;
   onSync?: () => void;
   isSyncing?: boolean;
@@ -44,6 +45,7 @@ export function StickyFilterBar({
   sortOptions,
   filterCount = 0,
   onToggleFilters,
+  filtersOpen = false,
   showAIButton = true,
   onSync,
   isSyncing = false,
@@ -145,7 +147,7 @@ export function StickyFilterBar({
         {/* Left Side: Smooth Touch-Scrollable Segment Toggle Chips */}
         <div className="relative flex-1 min-w-0 overflow-hidden">
           <div
-            role="tablist"
+            role="group"
             aria-label="Filter presets"
             className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none scroll-smooth touch-pan-x"
             style={{
@@ -160,12 +162,11 @@ export function StickyFilterBar({
                 <button
                   key={seg.id}
                   type="button"
-                  role="tab"
-                  aria-selected={isSelected}
+                  aria-pressed={isSelected}
                   onClick={() => onSegmentChange(seg.id)}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all cursor-pointer shrink-0 border select-none ${
                     isSelected
-                      ? "bg-[var(--border-focus)] text-white border-[var(--border-focus)] shadow-2xs font-semibold"
+                      ? "bg-[var(--surface-sunken)] text-[var(--text-primary)] border-[var(--border-focus)] shadow-2xs font-semibold"
                       : "bg-[var(--surface-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]"
                   }`}
                 >
@@ -173,7 +174,7 @@ export function StickyFilterBar({
                   {seg.count !== undefined && (
                     <span
                       className={`ml-1.5 px-1 py-0.2 rounded-full text-[10px] font-mono-tabular ${
-                        isSelected ? "bg-white/20 text-white" : "bg-[var(--surface-sunken)] text-[var(--text-muted)]"
+                        isSelected ? "bg-[var(--surface-elevated)] text-[var(--text-primary)]" : "bg-[var(--surface-sunken)] text-[var(--text-secondary)]"
                       }`}
                     >
                       {seg.count}
@@ -216,6 +217,8 @@ export function StickyFilterBar({
                 type="button"
                 onClick={onToggleFilters}
                 aria-label="Open advanced filters popover"
+                aria-expanded={filtersOpen}
+                aria-controls="inbox-filter-popover"
                 className={`inline-flex items-center gap-1 h-7.5 px-2 rounded-md border text-xs font-semibold transition-colors cursor-pointer ${
                   filterCount > 0
                     ? "border-[var(--border-focus)] bg-[var(--surface-sunken)] text-[var(--border-focus)]"
@@ -225,7 +228,7 @@ export function StickyFilterBar({
                 <SlidersHorizontal className="h-3 w-3" />
                 <span className="hidden sm:inline">Filters</span>
                 {filterCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-[var(--border-focus)] text-white text-[10px] font-mono-tabular font-bold">
+                  <span className="px-1.5 py-0.2 rounded-full bg-[var(--action-primary-bg)] text-white text-[10px] font-mono-tabular font-bold">
                     {filterCount}
                   </span>
                 )}

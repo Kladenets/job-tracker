@@ -9,6 +9,13 @@ import { AIDock } from "./ai-dock";
 export function RootLayout() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--surface-base)] text-[var(--text-primary)]">
+      <a
+        href="#main-content"
+        className="fixed left-2 top-2 z-[100] -translate-y-20 rounded bg-[var(--surface-base)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow focus:translate-y-0 focus-visible:outline-2 focus-visible:outline-[var(--border-focus)]"
+      >
+        Skip to main content
+      </a>
+
       {/* 1. Persistent Left Navigation Rail (Desktop only, zero unmount on route change) */}
       <SidebarRail />
 
