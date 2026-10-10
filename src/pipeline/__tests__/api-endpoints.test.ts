@@ -207,11 +207,18 @@ async function runApiTests() {
   try {
     const operationalHealthRes = await makeRequest(testServer, { method: "GET", path: "/api/health" });
     assert.strictEqual(operationalHealthRes.statusCode, 200);
-    assert.ok(["file", "postgres"].includes(operationalHealthRes.body.persistence.engine));
+    assert.strictEqual(operationalHealthRes.body.status, "healthy");
+    assert.ok(!("persistence" in operationalHealthRes.body), "Public readiness must not expose private persistence metadata");
+    assert.ok(!("aiProviders" in operationalHealthRes.body), "Public readiness must not expose provider tiers or failover state");
+    const ownerSystemHealthRes = await makeRequest(testServer, {
+      method: "GET",
+      path: "/api/system/health",
+    });
+    assert.strictEqual(ownerSystemHealthRes.statusCode, 200);
+    assert.ok(["file", "postgres"].includes(ownerSystemHealthRes.body.persistence.engine));
     assert.ok(["development", "guest", "owner_free", "owner_pro", "none"].includes(
-      operationalHealthRes.body.aiProviders.geminiInteractions.tier
+      ownerSystemHealthRes.body.aiProviders.geminiInteractions.tier
     ));
-    assert.strictEqual(typeof operationalHealthRes.body.aiProviders.geminiInteractions.failoverActive, "boolean");
     const dbStatusRes = await makeRequest(testServer, { method: "GET", path: "/api/db/status" });
     assert.strictEqual(dbStatusRes.statusCode, 200);
     assert.strictEqual(typeof dbStatusRes.body.postgres.connected, "boolean");
@@ -702,6 +709,13 @@ async function runApiTests() {
     });
     assert.strictEqual(sessionRes.statusCode, 200);
     assert.strictEqual(sessionRes.body.role, "guest");
+
+    const guestReadinessRes = await makeRequest(testServer, { method: "GET", path: "/api/health" });
+    assert.strictEqual(guestReadinessRes.statusCode, 200);
+    assert.ok(!("aiProviders" in guestReadinessRes.body));
+    assert.ok(!("persistence" in guestReadinessRes.body));
+    const guestSystemHealthRes = await makeRequest(testServer, { method: "GET", path: "/api/system/health" });
+    assert.strictEqual(guestSystemHealthRes.statusCode, 403, "Guest must not access owner system/provider telemetry");
 
     const guestJobsRes = await makeRequest(testServer, {
       method: "GET",

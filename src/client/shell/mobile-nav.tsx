@@ -9,14 +9,14 @@ export function MobileNavBar() {
   const { userRole } = useShellStore();
 
   const items = [
-    { to: "/inbox", label: "Inbox", icon: Inbox },
+    { to: "/inbox", label: userRole === "guest" ? "Explore Jobs" : "Inbox", icon: Inbox },
     ...(userRole === "owner"
       ? [
           { to: "/applications", label: "Applications", icon: KanbanSquare },
           { to: "/dashboard", label: "Metrics", icon: BarChart3 },
           { to: "/setup", label: "Setup", icon: Sliders },
         ]
-      : []),
+      : [{ to: "/applications", label: "Showcase", icon: KanbanSquare }]),
   ];
 
   return (

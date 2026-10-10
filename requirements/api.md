@@ -5,6 +5,10 @@ Defines the required backend API contracts supporting the five core frontend vie
 
 ## 2. Endpoints by Domain
 
+### Operational Health
+- `GET /api/health` is a public readiness endpoint for Docker/orchestrator probes. It returns service status, uptime, and timestamp only; it must not reveal provider tiers/failover, active profiles, or persistence details.
+- `GET /api/system/health` is owner-only and returns persistence connectivity and AI-provider telemetry for the private Setup diagnostics panel. Guests receive 403.
+
 ### 2.0 Session Role
 - `GET /api/session`: Returns the current request role (`owner` or `guest`) for role-aware client navigation. It must not return the authenticated owner's email or other identity details.
 
@@ -81,6 +85,7 @@ For guest `GET /api/jobs`, public market filters (company, availability, missing
   - Does not persist server-side and cannot access owner conversations, candidate profile, or resume. Guest thread state is client-memory-only and clears on page reload.
   - No application-level guest rate/budget cap is required for the MVP; provider quota is the limit.
 - **AI Health & Provider Status:**
-  - `GET /api/health` returns the selected persistence engine and exact Gemini key tier (`development`, `guest`, `owner_free`, `owner_pro`, or `none`) plus failover status, without billable probes.
+  - `GET /api/health` is a public, minimal readiness response for Docker/orchestrator probes. It must not expose active profile names, persistence details, provider configuration, key tiers, or failover state.
+  - Owner-authenticated `GET /api/system/health` returns the selected persistence engine and exact Gemini key tier (`development`, `guest`, `owner_free`, `owner_pro`, or `none`) plus failover status, without billable probes. Guest requests receive `403`.
   - `GET /api/db/status` returns the active persistence engine and actual PostgreSQL connectivity result; file-backed mode is not reported as PostgreSQL health.
   - AI conversation turn responses include the resolved role/tier telemetry after any owner retry. Guest responses expose only guest-tier status; guest 429s never activate owner failover or use owner keys/history.

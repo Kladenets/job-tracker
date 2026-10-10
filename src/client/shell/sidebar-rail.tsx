@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Inbox,
@@ -12,12 +13,15 @@ import {
 } from "lucide-react";
 import { useShellStore } from "./shell-store";
 import { ThemeToggle } from "../theme/theme-toggle";
+import { getGeminiTierDisplay, GeminiKeyTier } from "../components/system-health-status";
 
 interface NavItem {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   ownerOnly?: boolean;
+  guestOnly?: boolean;
+  guestLabel?: string;
   shortcut?: string;
 }
 
@@ -25,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     to: "/inbox",
     label: "Recommendations",
+    guestLabel: "Explore Jobs",
     icon: Inbox,
     shortcut: "1",
   },
@@ -34,6 +39,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: KanbanSquare,
     ownerOnly: true,
     shortcut: "2",
+  },
+  {
+    to: "/applications",
+    label: "Applications",
+    guestOnly: true,
+    guestLabel: "Showcase",
+    icon: KanbanSquare,
   },
   {
     to: "/dashboard",
@@ -51,10 +63,32 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+export function getVisibleNavItems(userRole: "owner" | "guest"): NavItem[] {
+  return NAV_ITEMS.filter((item) => userRole === "guest"
+    ? Boolean(item.guestOnly || !item.ownerOnly)
+    : !item.guestOnly);
+}
+
 export function SidebarRail() {
   const { sidebarCollapsed, toggleSidebar, toggleShortcutHelp, userRole } = useShellStore();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+  const { data: health } = useQuery<{
+    aiProviders: { geminiInteractions: { tier: GeminiKeyTier; failoverActive: boolean } };
+  }>({
+    queryKey: ["system-health"],
+    queryFn: async () => {
+      const response = await fetch("/api/system/health");
+      if (!response.ok) throw new Error("Could not load AI status");
+      return response.json();
+    },
+    enabled: userRole === "owner",
+    staleTime: 60_000,
+  });
+  const ownerAIStatus = getGeminiTierDisplay(
+    health?.aiProviders.geminiInteractions.tier,
+    health?.aiProviders.geminiInteractions.failoverActive
+  );
 
   // Global hotkey: '[' toggles sidebar collapse, '?' toggles shortcut guide
   useEffect(() => {
@@ -79,10 +113,7 @@ export function SidebarRail() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar, toggleShortcutHelp]);
 
-  const visibleNavItems = NAV_ITEMS.filter((item) => {
-    if (userRole === "guest" && item.ownerOnly) return false;
-    return true;
-  });
+  const visibleNavItems = getVisibleNavItems(userRole);
 
   return (
     <aside
@@ -145,7 +176,7 @@ export function SidebarRail() {
             <Link
               key={item.to}
               to={item.to}
-              title={sidebarCollapsed ? `${item.label} (${item.shortcut})` : undefined}
+              title={sidebarCollapsed ? `${userRole === "guest" ? item.guestLabel || item.label : item.label}${item.shortcut ? ` (${item.shortcut})` : ""}` : undefined}
               className={`flex items-center h-9 rounded-md text-xs font-medium transition-[width,background-color,border-color] duration-300 ease-in-out group relative cursor-pointer overflow-hidden ${
                 sidebarCollapsed ? "w-10" : "w-52"
               } ${
@@ -176,10 +207,10 @@ export function SidebarRail() {
                   sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
                 }`}
               >
-                <span className="truncate pr-1 text-xs">{item.label}</span>
+                <span className="truncate pr-1 text-xs">{userRole === "guest" ? item.guestLabel || item.label : item.label}</span>
 
-                {item.shortcut && (
-                  <kbd className="hidden lg:inline-block text-[10px] font-mono-tabular px-1 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-muted)] shrink-0">
+                {item.shortcut && userRole === "owner" && (
+                  <kbd className="hidden lg:inline-block text-[10px] font-mono-tabular px-1 py-0.2 rounded bg-[var(--surface-sunken)] border border-[var(--border-subtle)] text-[var(--text-secondary)] shrink-0">
                     {item.shortcut}
                   </kbd>
                 )}
@@ -191,9 +222,9 @@ export function SidebarRail() {
 
       {/* Footer Controls */}
       <div className="border-t border-[var(--border-subtle)] p-2 space-y-2 overflow-hidden">
-        {/* AI Tier Telemetry Badge (Informational status, strictly non-actionable) */}
+        {/* Guest status is consumer-facing; owner tier details come from live health telemetry. */}
         <div
-          title="AI Engine: Free Tier (Zero-cost operational tier)"
+          title={userRole === "guest" ? "Public AI assistant" : `AI Engine: ${ownerAIStatus.label}`}
           className={`h-9 flex items-center rounded-md bg-[var(--surface-sunken)]/70 border border-[var(--border-subtle)] overflow-hidden transition-[width] duration-300 ease-in-out cursor-default select-none ${
             sidebarCollapsed ? "w-10" : "w-52"
           }`}
@@ -206,8 +237,8 @@ export function SidebarRail() {
               sidebarCollapsed ? "opacity-0 pointer-events-none" : "opacity-100"
             }`}
           >
-            <span className="text-[var(--text-secondary)] truncate">AI Engine</span>
-            <span className="text-[var(--status-recommended-fg)] font-semibold shrink-0">Free Tier</span>
+            <span className="text-[var(--text-secondary)] truncate">{userRole === "guest" ? "AI Assistant" : "AI Engine"}</span>
+            <span className="text-[var(--status-recommended-fg)] font-semibold shrink-0">{userRole === "guest" ? "Public Demo" : ownerAIStatus.label}</span>
           </div>
         </div>
 

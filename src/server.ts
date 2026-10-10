@@ -100,8 +100,23 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "healthy" });
 });
 
-// Operational Readiness & Health Check Endpoint
-app.get("/api/health", async (_req: Request, res: Response) => {
+// Public readiness response for Docker/orchestrator probes. Keep private telemetry out.
+app.get("/api/health", (_req: Request, res: Response) => {
+  return res.json({
+    status: "healthy",
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    service: "Job Tracker Backend",
+    version: "0.4.0",
+  });
+});
+
+// Owner-only diagnostics consumed by the private Setup UI.
+app.get("/api/system/health", async (req: Request, res: Response) => {
+  if (req.user?.role !== "owner") {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+
   const { engine, repository } = getRepository();
   const profile = await getSearchProfile(repository);
   const keyInfo = resolveGeminiApiKey();

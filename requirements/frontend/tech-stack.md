@@ -70,5 +70,5 @@ Recruiter/portfolio navigation bar:
 
 ## 6. Frontend AI Session State & Token Probing
 
-- Provider telemetry is returned by `GET /api/health` and in AI conversation turn responses. The owner UI may show owner tier/failover details; the guest UI maps status to consumer-facing labels and must not expose owner-tier terminology.
+- Public readiness is returned by `GET /api/health` without provider or persistence telemetry. Owner provider diagnostics are returned by owner-only `GET /api/system/health` and AI conversation turn responses. The guest UI uses consumer-facing labels and must not expose owner-tier terminology.
 - An owner-tier 429 on the production free key activates the process-wide owner Pro cooldown and retries the current turn once when a Pro backup is configured. Guest 429s remain isolated to the guest key and never trigger or consume owner failover.

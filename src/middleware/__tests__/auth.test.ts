@@ -53,6 +53,14 @@ try {
   assert(testContext.result.statusCalled === undefined, "Health check should not return error status");
   console.log("✓ Operational health check successfully bypassed auth middleware");
 
+  testContext = createMockReq({ path: "/api/system/health" });
+  let privateHealthAllowed = false;
+  authMiddleware(testContext.req, testContext.res, () => {
+    privateHealthAllowed = true;
+  });
+  assert.strictEqual(privateHealthAllowed, false, "Owner diagnostics must not inherit the public readiness exception");
+  assert.strictEqual(testContext.result.statusCalled, 403);
+
   // Test 2: Local development bypass
   console.log("[Test 2] Verifying local development environment bypass (NODE_ENV=development)");
   process.env.NODE_ENV = "development";

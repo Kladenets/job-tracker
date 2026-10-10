@@ -60,7 +60,7 @@ export function SystemHealthPanel() {
   const { data: health, isLoading: isHealthLoading, refetch: refetchHealth } = useQuery<HealthResponse>({
     queryKey: ["system-health"],
     queryFn: async () => {
-      const res = await fetch("/api/health");
+      const res = await fetch("/api/system/health");
       if (!res.ok) throw new Error("Failed to fetch health");
       return res.json();
     },

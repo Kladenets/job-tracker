@@ -65,7 +65,7 @@ The server resolves keys deterministically without exposing them to the client:
 ### 3. Failover Execution & Process State Tracking
 - **Failover Trigger:** Only an owner agent currently using `owner_free` may activate failover after HTTP 429 (Rate Limit Exceeded / Quota Exhausted). When the Pro key is configured, retry that same turn once with `owner_pro`; if the retry fails, use the normal offline-resilience response. Guest agents never trigger or consume owner failover state.
 - **Cooldown & Reset:** Owner failover state is process-wide and remains active for 60 minutes. During that period, new owner requests resolve to `owner_pro`; guest requests continue to resolve only the isolated guest key. After cooldown, owner requests may use `owner_free` again.
-- **Telemetry Exposure:** The resolved tier name (`development`, `owner_free`, `owner_pro`, `guest`, `none`) and failover status are exposed to the client via `/api/health` and conversational responses, allowing the UI to render appropriate telemetry badges without ever leaking raw tokens.
+- **Telemetry Exposure:** Owner-only diagnostics expose resolved tier/failover status through `GET /api/system/health` and owner conversational responses. Public `GET /api/health` is a minimal readiness response and must not expose provider tiers, failover state, active profile names, or persistence details. Raw tokens are never returned.
 
 ## Perimeter Architecture (Zero Trust Edge)
 
@@ -112,7 +112,8 @@ The local and host environments must provide a unified composition defining thre
 - **Local development bypass:**
   - In local development mode (`NODE_ENV=development`), the authentication middleware must assign a local default user profile without requiring tunnel headers.
 - **Operational readiness exception:**
-  - The health check endpoint (`GET /api/health`) must remain accessible without authentication headers to permit Docker and orchestrator health checks.
+  - The minimal health check endpoint (`GET /api/health`) must remain accessible without authentication headers to permit Docker and orchestrator health checks; it must not return private diagnostics.
+  - Detailed system/provider telemetry is exposed only through owner-authenticated `GET /api/system/health`.
 
 ## Acceptance Criteria
 

@@ -10,7 +10,21 @@ import { ApplicationsPage } from "./pages/applications-page";
 import { DashboardPage } from "./pages/dashboard-page";
 import { SetupPage } from "./pages/setup-page";
 import { JobDetailPage } from "./pages/job-detail-page";
+import { resolveSessionRole } from "./session";
+import { getGuestRedirect } from "./route-access";
 import { z } from "zod";
+
+function SessionPending() {
+  return <div role="status" aria-live="polite" className="flex min-h-screen items-center justify-center text-sm text-[var(--text-secondary)]">Loading workspace…</div>;
+}
+
+export function createOwnerRouteGuard(pathname: "/dashboard" | "/setup") {
+  return async () => {
+    const role = await resolveSessionRole();
+    const redirectTo = getGuestRedirect(pathname, role);
+    if (redirectTo) throw redirect({ to: redirectTo });
+  };
+}
 
 const inboxSearchSchema = z.object({
   q: z.string().max(200).catch(""),
@@ -30,6 +44,8 @@ const dashboardSearchSchema = z.object({
 
 // 1. Root route housing persistent shell (left rail, outlet, mobile bar)
 const rootRoute = createRootRoute({
+  beforeLoad: () => resolveSessionRole(),
+  pendingComponent: SessionPending,
   component: RootLayout,
 });
 
@@ -61,6 +77,7 @@ const applicationsRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
+  beforeLoad: createOwnerRouteGuard("/dashboard"),
   validateSearch: dashboardSearchSchema,
   component: DashboardPage,
 });
@@ -69,6 +86,7 @@ const dashboardRoute = createRoute({
 const setupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/setup",
+  beforeLoad: createOwnerRouteGuard("/setup"),
   component: SetupPage,
 });
 

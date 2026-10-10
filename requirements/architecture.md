@@ -59,7 +59,8 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 - Web and background processing must support clean startup and shutdown without corrupting active work.
 - Repository initialization must apply unapplied version-controlled migrations transactionally before the web server or CLI uses PostgreSQL. A migration ledger and advisory lock must make startup repeatable and safe across concurrent app starts; missing migration files or a migration failure must fail startup before requests are served.
 - The product must clearly report when PostgreSQL, the crawler, or the AI provider is unavailable.
-- The application server must provide an operational health check endpoint (`GET /api/health`) that returns system uptime, process state, storage status, and AI configuration without triggering billable external calls or blocking application threads.
+- The application server must provide a public minimal readiness endpoint (`GET /api/health`) suitable for Docker/orchestrator probes; it returns service status, uptime, and timestamp only, without provider tiers, failover state, active profile names, or persistence details.
+- Detailed storage and AI-provider diagnostics are available only to owners through `GET /api/system/health`, without triggering billable external calls or blocking application threads.
 
 ## AI usage controls
 

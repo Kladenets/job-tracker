@@ -60,6 +60,7 @@
   - Database status: Active engine and actual PostgreSQL connectivity (`Connected`, `Unavailable`, or `Unknown`); file mode reports the file store as active rather than claiming PostgreSQL health.
   - AI System 1 (TypeSafe AI / JEV): Status (`Active` or `Simulated Scoring`).
   - AI System 2 (Google Gemini Interactions): Display exact resolved tier (`Development Key`, `Free Tier`, `Pro Tier`, or `Pro Backup` only during failover), configured/offline state, and actual failover status.
+  - This private panel reads owner-only `GET /api/system/health`; the public Docker readiness endpoint `GET /api/health` does not provide diagnostics.
 
 ### 1.6 Guest Mode Boundary & Configuration Locking
 - **Access Rule:** Strictly restricted to authenticated owner sessions (`role = 'owner'`).
