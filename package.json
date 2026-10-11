@@ -4,8 +4,8 @@
   "type": "module",
   "description": "Job Tracker local ingestion and tracking engine",
   "engines": {
-    "node": ">=24.19.0 <25",
-    "npm": ">=12.2.0 <13"
+    "node": "^22.23.2 || ^24.19.0",
+    "npm": ">=10.9.8 <13"
   },
   "packageManager": "npm@12.2.0",
   "scripts": {
