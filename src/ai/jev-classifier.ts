@@ -1,6 +1,6 @@
-import { UnifiedJobPosting } from "../types/job-posting";
-import { SearchProfile, getSearchProfile } from "../config/search-profile";
-import { getRepository } from "../db";
+import { UnifiedJobPosting } from "../types/job-posting.js";
+import { SearchProfile, getSearchProfile } from "../config/search-profile.js";
+import { getRepository } from "../db/index.js";
 
 export interface JevFitDecision {
   fit: boolean;

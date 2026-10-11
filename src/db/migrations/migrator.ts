@@ -1,7 +1,8 @@
-import { getDatabasePool } from "../connection";
-import { Pool } from "pg";
 import fs from "fs";
+import { fileURLToPath } from "node:url";
 import path from "path";
+import { Pool } from "pg";
+import { getDatabasePool } from "../connection.js";
 
 export interface MigrationRunnerOptions {
   pool?: Pool | null;
@@ -17,7 +18,7 @@ export async function runMigrations(options?: MigrationRunnerOptions): Promise<{
     };
   }
 
-  const migrationsDir = options?.migrationsDirectory || __dirname;
+  const migrationsDir = options?.migrationsDirectory || path.dirname(fileURLToPath(import.meta.url));
   const files = fs
     .readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))

@@ -1,6 +1,6 @@
-import { JobPostingRepository } from "../../db/repository-interface";
-import { SearchProfile } from "../../config/search-profile";
-import { Conversation } from "./conversation";
+import { JobPostingRepository } from "../../db/repository-interface.js";
+import { SearchProfile } from "../../config/search-profile.js";
+import { Conversation } from "./conversation.js";
 
 /**
  * Execution context provided to all tools during agent turns.

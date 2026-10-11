@@ -1,8 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
-import { UnifiedJobPosting } from "../types/job-posting";
-import { SearchProfile, getSearchProfile } from "../config/search-profile";
-import { getRepository } from "../db";
-import { resolveGeminiApiKey } from "./key-resolver";
+import { UnifiedJobPosting } from "../types/job-posting.js";
+import { SearchProfile, getSearchProfile } from "../config/search-profile.js";
+import { getRepository } from "../db/index.js";
+import { resolveGeminiApiKey } from "./key-resolver.js";
 
 export interface DeepAnalysisResult {
   overallFitScore: number;

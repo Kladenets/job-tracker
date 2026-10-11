@@ -1,6 +1,6 @@
-import { Tool, ToolContext } from "../tool";
-import { UnifiedJobPosting } from "../../../types/job-posting";
-import { getCandidateProfile, getCandidateResume } from "../../../utils/resume-sync";
+import { Tool, ToolContext } from "../tool.js";
+import { UnifiedJobPosting } from "../../../types/job-posting.js";
+import { getCandidateProfile, getCandidateResume } from "../../../utils/resume-sync.js";
 
 export class GenerateInterviewPrepTool implements Tool {
   readonly name = "generate_interview_prep";

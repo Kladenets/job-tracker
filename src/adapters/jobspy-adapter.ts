@@ -1,6 +1,6 @@
-import { RawJobPosting } from "../types/job";
-import { SourceAdapter } from "./adapter-interface";
-import { runJobSpyScraper } from "../bridges/jobspy-bridge";
+import { RawJobPosting } from "../types/job.js";
+import { SourceAdapter } from "./adapter-interface.js";
+import { runJobSpyScraper } from "../bridges/jobspy-bridge.js";
 
 export class JobSpyAdapter implements SourceAdapter {
   readonly sourceName = "jobspy";

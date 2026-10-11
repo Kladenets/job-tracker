@@ -1,4 +1,4 @@
-import { RawJobPosting } from "../types/job";
+import { RawJobPosting } from "../types/job.js";
 
 export interface SourceAdapter {
   readonly sourceName: string;

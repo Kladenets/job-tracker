@@ -4,7 +4,7 @@ import {
   JobSpyQuery,
   JobSpyBridgeResult,
   JobSpyBridgeResultSchema,
-} from "../types/job";
+} from "../types/job.js";
 
 /**
  * Executes python-jobspy via ephemeral child process and returns sanitized, typed job postings.

@@ -1,5 +1,5 @@
-import { Tool, ToolContext } from "../tool";
-import { UnifiedJobPosting } from "../../../types/job-posting";
+import { Tool, ToolContext } from "../tool.js";
+import { UnifiedJobPosting } from "../../../types/job-posting.js";
 
 export class GetJobDetailsTool implements Tool {
   readonly name = "get_job_details";

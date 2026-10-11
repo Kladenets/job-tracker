@@ -1,7 +1,13 @@
 {
   "name": "job-tracker-backend",
   "version": "0.1.0",
+  "type": "module",
   "description": "Job Tracker local ingestion and tracking engine",
+  "engines": {
+    "node": ">=24.19.0 <25",
+    "npm": ">=12.2.0 <13"
+  },
+  "packageManager": "npm@12.2.0",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build:server": "tsc && node scripts/copy-db-migrations.cjs",
@@ -11,7 +17,7 @@
     "lint:client": "tsc --project tsconfig.client.json --noEmit",
     "lint": "npm run lint:server && npm run lint:client",
     "agent:chat": "tsx src/scripts/chat.ts",
-    "test": "node -r tsx/cjs src/normalizers/__tests__/job-translator.test.ts && node -r tsx/cjs src/pipeline/__tests__/deduplication-and-state.test.ts && node -r tsx/cjs src/ai/agent/__tests__/agent.test.ts && node -r tsx/cjs src/middleware/__tests__/auth.test.ts && node -r tsx/cjs src/pipeline/__tests__/applications-and-metrics.test.ts && node -r tsx/cjs src/db/__tests__/migrator.test.ts && node -r tsx/cjs src/pipeline/__tests__/api-endpoints.test.ts && node -r tsx/cjs src/client/theme/__tests__/theme-and-tokens.test.ts && node -r tsx/cjs src/client/shell/__tests__/shell-and-router.test.ts && node -r tsx/cjs src/client/shell/__tests__/ai-dock.test.ts && node -r tsx/cjs src/client/pages/__tests__/inbox-page.test.ts && node -r tsx/cjs src/client/pages/__tests__/applications-page.test.ts && node -r tsx/cjs src/client/pages/__tests__/dashboard-page.test.ts && node -r tsx/cjs src/client/pages/__tests__/setup-page.test.ts",
+    "test": "tsx src/normalizers/__tests__/job-translator.test.ts && tsx src/pipeline/__tests__/deduplication-and-state.test.ts && tsx src/ai/agent/__tests__/agent.test.ts && tsx src/middleware/__tests__/auth.test.ts && tsx src/pipeline/__tests__/applications-and-metrics.test.ts && tsx src/db/__tests__/migrator.test.ts && tsx src/pipeline/__tests__/api-endpoints.test.ts && tsx src/client/theme/__tests__/theme-and-tokens.test.ts && tsx src/client/shell/__tests__/shell-and-router.test.ts && tsx src/client/shell/__tests__/ai-dock.test.ts && tsx src/client/pages/__tests__/inbox-page.test.ts && tsx src/client/pages/__tests__/applications-page.test.ts && tsx src/client/pages/__tests__/dashboard-page.test.ts && tsx src/client/pages/__tests__/setup-page.test.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
@@ -45,7 +51,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.19.2",
-    "typescript": "^5.5.2",
+    "typescript": "^7.0.2",
     "vite": "^8.3.1"
   }
 }

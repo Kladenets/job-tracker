@@ -3,9 +3,9 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { fetchSafeResumeText } from "../../utils/safe-resume-fetch";
 import { sourceRegistry } from "../../adapters";
 import { jevClassifier } from "../../ai/jev-classifier";
+import { fetchSafeResumeText } from "../../utils/safe-resume-fetch";
 
 console.log("=== Running End-to-End HTTP API Endpoint Tests ===");
 
@@ -138,7 +138,7 @@ async function runApiTests() {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = "";
   delete process.env.JOB_TRACKER_FORCE_FILE;
-  const { initializeRepository, getRepository, selectRepository } = require("../../db");
+  const { initializeRepository, getRepository, selectRepository } = await import("../../db/index.js");
 
   const fakePostgresRepository = { kind: "postgres-test" };
   const fakeFileRepository = { kind: "file-test" };
@@ -199,7 +199,7 @@ async function runApiTests() {
   process.env.JOB_TRACKER_STORE_PATH = path.join(testDataDirectory, "job_tracker_store.json");
   const initializedRepository = await initializeRepository();
   assert.strictEqual(initializedRepository.engine, "file", "Test mode can explicitly initialize the isolated file repository");
-  const app = require("../../server").default;
+  const app = (await import("../../server.js")).default;
   // Start ephemeral test server on random port
   const testServer = http.createServer(app);
   await new Promise<void>((resolve) => testServer.listen(0, "127.0.0.1", () => resolve()));

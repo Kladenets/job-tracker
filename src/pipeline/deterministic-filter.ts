@@ -1,5 +1,5 @@
-import { UnifiedJobPosting } from "../types/job-posting";
-import { SearchProfile, loadSearchProfile } from "../config/search-profile";
+import { UnifiedJobPosting } from "../types/job-posting.js";
+import { SearchProfile, loadSearchProfile } from "../config/search-profile.js";
 import { distance as distanceBetweenZips, lookup as lookupZip, lookupByName } from "zipcodes";
 
 export interface FilterRuleResult {

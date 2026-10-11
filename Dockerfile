@@ -1,6 +1,6 @@
 # Multi-Stage Production Dockerfile for Job Tracker Engine
 # Stage 1: Build & Compile TypeScript
-FROM node:22-alpine AS builder
+FROM node:24.19.0-alpine AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY package*.json tsconfig.json ./
 COPY scripts/copy-db-migrations.cjs ./scripts/copy-db-migrations.cjs
 
 # Install all dependencies (including devDependencies required for compilation)
-RUN npm ci
+RUN npm install --global npm@12.2.0 && npm ci
 
 # Copy full application source code
 COPY src/ ./src/
@@ -18,7 +18,7 @@ COPY src/ ./src/
 RUN npm run build
 
 # Stage 2: Minimal & Secure Production Runner
-FROM node:22-alpine AS runner
+FROM node:24.19.0-alpine AS runner
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ ENV HOST=0.0.0.0
 
 # Copy package manifests and install only production dependencies
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --global npm@12.2.0 && npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled JavaScript output from builder stage
 COPY --from=builder /app/dist ./dist

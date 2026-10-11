@@ -1,7 +1,7 @@
-import { Application, UnifiedJobPosting } from "../types/job-posting";
-import { JobPostingRepository, ExistingJobMatch } from "./repository-interface";
-import { calculateDashboardMetrics } from "./metrics";
-import { Conversation, StoredConversation } from "../ai/agent/conversation";
+import { Application, UnifiedJobPosting } from "../types/job-posting.js";
+import { JobPostingRepository, ExistingJobMatch } from "./repository-interface.js";
+import { calculateDashboardMetrics } from "./metrics.js";
+import { Conversation, StoredConversation } from "../ai/agent/conversation.js";
 import fs from "fs";
 import path from "path";
 

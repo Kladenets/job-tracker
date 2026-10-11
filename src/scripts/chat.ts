@@ -1,9 +1,10 @@
-import readline from "readline";
 import dotenv from "dotenv";
-import { GeminiAgent, DEFAULT_GEMINI_MODEL } from "../ai/agent/gemini-agent";
-import { Conversation } from "../ai/agent/conversation";
-import { createDefaultTools } from "../ai/agent/tools";
-import { getRepository, initializeRepository } from "../db";
+import { pathToFileURL } from "node:url";
+import readline from "readline";
+import { Conversation } from "../ai/agent/conversation.js";
+import { DEFAULT_GEMINI_MODEL, GeminiAgent } from "../ai/agent/gemini-agent.js";
+import { createDefaultTools } from "../ai/agent/tools/index.js";
+import { getRepository, initializeRepository } from "../db/index.js";
 
 dotenv.config();
 
@@ -159,7 +160,7 @@ async function main() {
   promptUser();
 }
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error("Fatal error:", err);
     process.exit(1);

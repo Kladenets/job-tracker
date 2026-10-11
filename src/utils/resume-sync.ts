@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
-import { StructuredResume, ResumeSource } from "../types/resume";
-import { JobPostingRepository } from "../db/repository-interface";
+import { StructuredResume, ResumeSource } from "../types/resume.js";
+import { JobPostingRepository } from "../db/repository-interface.js";
 
 const candidateProfilePath = path.join(process.cwd(), "config", "candidate_profile.json");
 const candidateResumePath = path.join(process.cwd(), "config", "candidate_resume.json");

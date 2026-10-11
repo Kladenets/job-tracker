@@ -1,10 +1,10 @@
-import { Tool } from "../tool";
-import { GetJobDetailsTool } from "./get-job-details.tool";
-import { AnalyzeQualificationFitTool } from "./analyze-qualification-fit.tool";
-import { DraftCoverLetterTool } from "./draft-cover-letter.tool";
-import { GenerateInterviewPrepTool } from "./generate-interview-prep.tool";
-import { SearchSavedJobsTool } from "./search-saved-jobs.tool";
-import { NameConversationTool } from "./name-conversation.tool";
+import { Tool } from "../tool.js";
+import { GetJobDetailsTool } from "./get-job-details.tool.js";
+import { AnalyzeQualificationFitTool } from "./analyze-qualification-fit.tool.js";
+import { DraftCoverLetterTool } from "./draft-cover-letter.tool.js";
+import { GenerateInterviewPrepTool } from "./generate-interview-prep.tool.js";
+import { SearchSavedJobsTool } from "./search-saved-jobs.tool.js";
+import { NameConversationTool } from "./name-conversation.tool.js";
 
 export {
   GetJobDetailsTool,

@@ -1,11 +1,11 @@
-import { translateRawJobPosting } from "../normalizers/job-translator";
-import { RawJobPosting } from "../types/job";
-import { UnifiedJobPosting } from "../types/job-posting";
-import { getRepository } from "../db";
-import { JobPostingRepository } from "../db/repository-interface";
-import { evaluateDeterministicFilter } from "./deterministic-filter";
-import { jevClassifier, FitClassifier } from "../ai/jev-classifier";
-import { SearchProfile, getSearchProfile } from "../config/search-profile";
+import { translateRawJobPosting } from "../normalizers/job-translator.js";
+import { RawJobPosting } from "../types/job.js";
+import { UnifiedJobPosting } from "../types/job-posting.js";
+import { getRepository } from "../db/index.js";
+import { JobPostingRepository } from "../db/repository-interface.js";
+import { evaluateDeterministicFilter } from "./deterministic-filter.js";
+import { jevClassifier, FitClassifier } from "../ai/jev-classifier.js";
+import { SearchProfile, getSearchProfile } from "../config/search-profile.js";
 
 export interface PipelineIngestResult {
   totalProcessed: number;

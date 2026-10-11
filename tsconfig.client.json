@@ -15,9 +15,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/client/*"]
+      "@/*": ["./src/client/*"]
     }
   },
   "include": ["src/client/**/*", "vite.config.ts"]

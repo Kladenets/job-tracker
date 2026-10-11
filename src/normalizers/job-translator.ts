@@ -1,14 +1,14 @@
 import { randomUUID } from "crypto";
-import { RawJobPosting } from "../types/job";
-import { UnifiedJobPosting } from "../types/job-posting";
-import { normalizeUrl, hashContent } from "./url-normalizer";
-import { normalizeCompensation } from "./compensation-normalizer";
+import { RawJobPosting } from "../types/job.js";
+import { UnifiedJobPosting } from "../types/job-posting.js";
+import { normalizeUrl, hashContent } from "./url-normalizer.js";
+import { normalizeCompensation } from "./compensation-normalizer.js";
 import {
   normalizeSeniority,
   normalizeWorkplaceType,
   normalizeEmploymentType,
   cleanDescriptionText,
-} from "./text-normalizer";
+} from "./text-normalizer.js";
 
 /**
  * Common list of common technical skills / keywords to detect in first-pass extraction.

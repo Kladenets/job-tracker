@@ -1,4 +1,4 @@
-import { Tool, ToolContext } from "../tool";
+import { Tool, ToolContext } from "../tool.js";
 
 export class NameConversationTool implements Tool {
   readonly name = "name_conversation";

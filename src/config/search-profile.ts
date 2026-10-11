@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
-import { JobPostingRepository } from "../db/repository-interface";
-import { getCandidateProfile } from "../utils/resume-sync";
+import { JobPostingRepository } from "../db/repository-interface.js";
+import { getCandidateProfile } from "../utils/resume-sync.js";
 
 export const SearchProfileSchema = z.object({
   id: z.string().default("profile-default-fullstack"),

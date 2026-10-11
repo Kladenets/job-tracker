@@ -88,8 +88,8 @@ The application must be fully containerized using Docker and orchestratable via 
   - Installs complete dependencies (including devDependencies required for compilation).
   - Compiles TypeScript into clean JavaScript (`dist/`).
 - **Runner stage:**
-  - Utilizes a minimal, secure Node base image (`node:22-alpine` or `node:22-slim`).
-  - Installs production-only dependencies (`npm ci --only=production`).
+  - Utilizes a minimal, secure Node 24.19.0 base image (`node:24.19.0-alpine` or `node:24.19.0-slim`), matching the repository's `.nvmrc` runtime pin.
+  - Installs production-only dependencies with the pinned npm 12.2.x toolchain (`npm ci --omit=dev`).
   - Drops root privileges and executes as a non-privileged system user (`USER node`).
   - Exposes port `3000` and configures health check instructions (`HEALTHCHECK CMD wget --spider http://localhost:3000/api/health`).
 

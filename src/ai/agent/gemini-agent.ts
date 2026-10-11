@@ -1,10 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import { Conversation, ToolCallExecution } from "./conversation";
-import { Tool, ToolContext } from "./tool";
-import { createDefaultTools } from "./tools";
-import { getRepository } from "../../db";
-import { getSearchProfile } from "../../config/search-profile";
-import { resolveGeminiApiKey, triggerProFailover, isFailoverActive } from "../key-resolver";
+import { Conversation, ToolCallExecution } from "./conversation.js";
+import { Tool, ToolContext } from "./tool.js";
+import { createDefaultTools } from "./tools/index.js";
+import { getRepository } from "../../db/index.js";
+import { getSearchProfile } from "../../config/search-profile.js";
+import { resolveGeminiApiKey, triggerProFailover, isFailoverActive } from "../key-resolver.js";
 
 export const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 

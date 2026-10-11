@@ -1,8 +1,8 @@
 import { Pool } from "pg";
-import { Application, UnifiedJobPosting } from "../types/job-posting";
-import { JobPostingRepository, ExistingJobMatch } from "./repository-interface";
-import { calculateDashboardMetrics } from "./metrics";
-import { Conversation, StoredConversation } from "../ai/agent/conversation";
+import { Application, UnifiedJobPosting } from "../types/job-posting.js";
+import { JobPostingRepository, ExistingJobMatch } from "./repository-interface.js";
+import { calculateDashboardMetrics } from "./metrics.js";
+import { Conversation, StoredConversation } from "../ai/agent/conversation.js";
 
 export class PostgresJobRepository implements JobPostingRepository {
   constructor(private pool: Pool) {}

@@ -1,4 +1,4 @@
-import { Tool, ToolContext } from "../tool";
+import { Tool, ToolContext } from "../tool.js";
 
 export class SearchSavedJobsTool implements Tool {
   readonly name = "search_saved_jobs";

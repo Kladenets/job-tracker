@@ -1,7 +1,7 @@
-import { SourceAdapter } from "./adapter-interface";
-import { JobSpyAdapter } from "./jobspy-adapter";
-import { GreenhouseAdapter } from "./greenhouse-adapter";
-import { LeverAdapter } from "./lever-adapter";
+import { SourceAdapter } from "./adapter-interface.js";
+import { JobSpyAdapter } from "./jobspy-adapter.js";
+import { GreenhouseAdapter } from "./greenhouse-adapter.js";
+import { LeverAdapter } from "./lever-adapter.js";
 
 class SourceAdapterRegistry {
   private adapters = new Map<string, SourceAdapter>();

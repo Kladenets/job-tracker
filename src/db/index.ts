@@ -1,8 +1,8 @@
-import { JobPostingRepository } from "./repository-interface";
-import { PostgresJobRepository } from "./postgres-repository";
-import { FileJobRepository } from "./file-repository";
-import { checkDatabaseConnection, getDatabasePool } from "./connection";
-import { runMigrations } from "./migrations/migrator";
+import { JobPostingRepository } from "./repository-interface.js";
+import { PostgresJobRepository } from "./postgres-repository.js";
+import { FileJobRepository } from "./file-repository.js";
+import { checkDatabaseConnection, getDatabasePool } from "./connection.js";
+import { runMigrations } from "./migrations/migrator.js";
 
 let activeRepository: JobPostingRepository | null = null;
 let activeEngine: "postgres" | "file" = "file";

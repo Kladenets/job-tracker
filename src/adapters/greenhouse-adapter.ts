@@ -1,5 +1,5 @@
-import { RawJobPosting } from "../types/job";
-import { SourceAdapter } from "./adapter-interface";
+import { RawJobPosting } from "../types/job.js";
+import { SourceAdapter } from "./adapter-interface.js";
 
 export interface GreenhouseJobSummary {
   id: number;

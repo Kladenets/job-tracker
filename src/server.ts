@@ -1,38 +1,39 @@
-import express, { Request, Response } from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { createHash, randomUUID } from "crypto";
-import { z } from "zod";
+import dotenv from "dotenv";
+import express, { Request, Response } from "express";
 import fs from "fs";
+import { pathToFileURL } from "node:url";
 import path from "path";
-import { runJobSpyScraper } from "./bridges/jobspy-bridge";
-import { JobSpyQuerySchema, RawJobPostingSchema, RawJobPosting } from "./types/job";
-import { sourceRegistry } from "./adapters";
-import { GreenhouseAdapter } from "./adapters/greenhouse-adapter";
-import { LeverAdapter } from "./adapters/lever-adapter";
-import { getRepository, initializeRepository } from "./db";
-import { checkDatabaseConnection } from "./db/connection";
-import { runMigrations } from "./db/migrations/migrator";
-import { ingestRawPostings } from "./pipeline/ingestion-pipeline";
-import { getSearchProfile, SearchProfileSchema } from "./config/search-profile";
-import { geminiAgent } from "./ai/gemini-agent";
-import { GeminiAgent } from "./ai/agent/gemini-agent";
-import { Conversation } from "./ai/agent/conversation";
-import { authMiddleware } from "./middleware/auth";
-import { resolveGeminiApiKey } from "./ai/key-resolver";
+import { z } from "zod";
+import { GreenhouseAdapter } from "./adapters/greenhouse-adapter.js";
+import { sourceRegistry } from "./adapters/index.js";
+import { LeverAdapter } from "./adapters/lever-adapter.js";
+import { Conversation } from "./ai/agent/conversation.js";
+import { GeminiAgent } from "./ai/agent/gemini-agent.js";
+import { geminiAgent } from "./ai/gemini-agent.js";
+import { resolveGeminiApiKey } from "./ai/key-resolver.js";
+import { runJobSpyScraper } from "./bridges/jobspy-bridge.js";
+import { getSearchProfile, SearchProfileSchema } from "./config/search-profile.js";
+import { checkDatabaseConnection } from "./db/connection.js";
+import { getRepository, initializeRepository } from "./db/index.js";
+import { runMigrations } from "./db/migrations/migrator.js";
+import { authMiddleware } from "./middleware/auth.js";
+import { ingestRawPostings } from "./pipeline/ingestion-pipeline.js";
 import {
-  getCandidateProfile,
-  getCandidateResume,
-  parseJsonResume,
-  deriveProfileFromResume,
-} from "./utils/resume-sync";
-import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch";
+    Application,
+    ApplicationStatusSchema,
+    JobWorkflowStatusSchema,
+    UnifiedJobPosting,
+} from "./types/job-posting.js";
+import { JobSpyQuerySchema, RawJobPosting, RawJobPostingSchema } from "./types/job.js";
 import {
-  Application,
-  ApplicationStatusSchema,
-  JobWorkflowStatusSchema,
-  UnifiedJobPosting,
-} from "./types/job-posting";
+    deriveProfileFromResume,
+    getCandidateProfile,
+    getCandidateResume,
+    parseJsonResume,
+} from "./utils/resume-sync.js";
+import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch.js";
 
 dotenv.config();
 
@@ -1434,7 +1435,7 @@ app.get("/api/sources/jobspy/test", async (req: Request, res: Response) => {
   }
 });
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const startServer = async () => {
     await initializeRepository();
 
@@ -1450,9 +1451,7 @@ if (require.main === module) {
       });
     } else {
       try {
-        // Dynamic import to prevent CommonJS typescript resolution error
-        const viteModulePath = "vite";
-        const { createServer: createViteServer } = await (eval(`import("${viteModulePath}")`) as Promise<any>);
+        const { createServer: createViteServer } = await import("vite");
         const vite = await createViteServer({
           server: { middlewareMode: true },
           appType: "spa",

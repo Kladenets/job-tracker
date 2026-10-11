@@ -1,4 +1,4 @@
-import { SeniorityLevel, WorkplaceType, EmploymentType } from "../types/job-posting";
+import { SeniorityLevel, WorkplaceType, EmploymentType } from "../types/job-posting.js";
 
 /**
  * Maps varying source seniority terms into our canonical SeniorityLevel enum.

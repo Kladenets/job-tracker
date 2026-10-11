@@ -1,6 +1,6 @@
-import { Application, UnifiedJobPosting } from "../types/job-posting";
-import { Conversation } from "../ai/agent/conversation";
-import { DashboardMetrics, MetricsOptions } from "./metrics";
+import { Application, UnifiedJobPosting } from "../types/job-posting.js";
+import { Conversation } from "../ai/agent/conversation.js";
+import { DashboardMetrics, MetricsOptions } from "./metrics.js";
 
 export interface ExistingJobMatch {
   id: string;
