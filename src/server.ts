@@ -3,7 +3,6 @@ import { createHash, randomUUID } from "crypto";
 import dotenv from "dotenv";
 import express, { Request, Response } from "express";
 import fs from "fs";
-import type { Server } from "node:http";
 import { pathToFileURL } from "node:url";
 import path from "path";
 import { z } from "zod";
@@ -22,17 +21,17 @@ import { runMigrations } from "./db/migrations/migrator.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { ingestRawPostings } from "./pipeline/ingestion-pipeline.js";
 import {
-    Application,
-    ApplicationStatusSchema,
-    JobWorkflowStatusSchema,
-    UnifiedJobPosting,
+  Application,
+  ApplicationStatusSchema,
+  JobWorkflowStatusSchema,
+  UnifiedJobPosting,
 } from "./types/job-posting.js";
 import { JobSpyQuerySchema, RawJobPosting, RawJobPostingSchema } from "./types/job.js";
 import {
-    deriveProfileFromResume,
-    getCandidateProfile,
-    getCandidateResume,
-    parseJsonResume,
+  deriveProfileFromResume,
+  getCandidateProfile,
+  getCandidateResume,
+  parseJsonResume,
 } from "./utils/resume-sync.js";
 import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch.js";
 
@@ -1436,42 +1435,38 @@ app.get("/api/sources/jobspy/test", async (req: Request, res: Response) => {
   }
 });
 
-export async function startServer(): Promise<Server> {
-  await initializeRepository();
-
-  // If running in development with Vite or production with built static files
-  const isProd = process.env.NODE_ENV === "production";
-  const clientDistPath = path.join(process.cwd(), "dist", "client");
-
-  if (isProd && fs.existsSync(clientDistPath)) {
-    app.use(express.static(clientDistPath));
-    app.get("*", (req: Request, res: Response, next) => {
-      if (req.path.startsWith("/api")) return next();
-      return res.sendFile(path.join(clientDistPath, "index.html"));
-    });
-  } else {
-    try {
-      const { createServer: createViteServer } = await import("vite");
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    } catch (err) {
-      console.warn("[Job Tracker Server] Vite dev middleware not attached:", err);
-    }
-  }
-
-  return new Promise((resolve, reject) => {
-    const server = app.listen(port, host, () => {
-      console.log(`[Job Tracker Server] Listening on http://${host}:${port}`);
-      resolve(server);
-    });
-    server.once("error", reject);
-  });
-}
-
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const startServer = async () => {
+    await initializeRepository();
+
+    // If running in development with Vite or production with built static files
+    const isProd = process.env.NODE_ENV === "production";
+    const clientDistPath = path.join(process.cwd(), "dist", "client");
+
+    if (isProd && fs.existsSync(clientDistPath)) {
+      app.use(express.static(clientDistPath));
+      app.get("*", (req: Request, res: Response, next) => {
+        if (req.path.startsWith("/api")) return next();
+        return res.sendFile(path.join(clientDistPath, "index.html"));
+      });
+    } else {
+      try {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } catch (err) {
+        console.warn("[Job Tracker Server] Vite dev middleware not attached:", err);
+      }
+    }
+
+    app.listen(port, host, () => {
+      console.log(`[Job Tracker Server] Listening on http://${host}:${port}`);
+    });
+  };
+
   startServer().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[Job Tracker Server] Startup failed: ${message}`);

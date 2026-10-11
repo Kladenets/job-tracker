@@ -199,9 +199,7 @@ async function runApiTests() {
   process.env.JOB_TRACKER_STORE_PATH = path.join(testDataDirectory, "job_tracker_store.json");
   const initializedRepository = await initializeRepository();
   assert.strictEqual(initializedRepository.engine, "file", "Test mode can explicitly initialize the isolated file repository");
-  const serverModule = await import("../../server.js");
-  assert.strictEqual(typeof serverModule.startServer, "function", "Server startup is available to platform launchers");
-  const app = serverModule.default;
+  const app = (await import("../../server.js")).default;
   // Start ephemeral test server on random port
   const testServer = http.createServer(app);
   await new Promise<void>((resolve) => testServer.listen(0, "127.0.0.1", () => resolve()));
