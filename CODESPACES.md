@@ -42,7 +42,8 @@ PostgreSQL data exists only in the Codespaces database container. To reset it an
 
 Add Codespaces secrets in GitHub Settings and expose them to the repository Codespace only when intentionally using a live provider:
 
+- `OPENROUTER_API_KEY` for OpenCode with OpenRouter.
 - `GEMINI_API_KEY` for live interactive Gemini.
 - `TYPESAFE_API_KEY` (or the supported alias `TYPESAFE_AI_API_KEY`) for live JEV.
 
-These are optional and are used at runtime. Do not place secret values in devcontainer files, Docker build arguments, logs, or committed `.env` files. Ordinary development does not require production Gemini keys, Cloudflare Access credentials, tunnel tokens, or `API_SECRET_KEY`.
+OpenCode CLI is installed in the devcontainer. OpenRouter is a hosted provider, not a separate package to install; choose an OpenRouter model interactively in OpenCode. These secrets are optional and used at runtime. Do not place secret values in devcontainer files, Docker build arguments, logs, or committed `.env` files. Ordinary development does not require production Gemini keys, Cloudflare Access credentials, tunnel tokens, or `API_SECRET_KEY`.

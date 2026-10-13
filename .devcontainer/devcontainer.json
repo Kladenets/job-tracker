@@ -24,5 +24,5 @@
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "sudo chown -R \"$(id -u):$(id -g)\" node_modules .venv && npm install --global npm@12.2.0 && npm ci && python3 -m venv .venv && .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt"
+  "postCreateCommand": "sudo chown -R \"$(id -u):$(id -g)\" node_modules .venv && npm install --global npm@12.2.0 && npm install --global --allow-scripts=@opencode/cli @opencode/cli@2.0.28 && npm ci && python3 -m venv .venv && .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt"
 }
