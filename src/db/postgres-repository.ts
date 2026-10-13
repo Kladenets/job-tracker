@@ -1,8 +1,23 @@
 import { Pool } from "pg";
 import { Application, UnifiedJobPosting } from "../types/job-posting.js";
-import { JobPostingRepository, ExistingJobMatch } from "./repository-interface.js";
+import { DiscoveryRun, JobPostingRepository, ExistingJobMatch } from "./repository-interface.js";
 import { calculateDashboardMetrics } from "./metrics.js";
 import { Conversation, StoredConversation } from "../ai/agent/conversation.js";
+import { AiUsageRecord, AiUsageSummary, DailyAiBudget, AiBudgetExceededError } from "../ai/usage-types.js";
+import {
+  NewRecommendationFeedback,
+  RecommendationFeedback,
+  RecommendationFeedbackSchema,
+} from "../types/job-posting.js";
+import {
+  ApplicationDraft,
+  ApplicationDraftListOptions,
+  ApplicationDraftSourceFact,
+  ApplicationDraftVersion,
+  NewApplicationDraft,
+  NewApplicationDraftSchema,
+  ApplicationDraftSchema,
+} from "../ai/application-drafts.js";
 
 export class PostgresJobRepository implements JobPostingRepository {
   constructor(private pool: Pool) {}
@@ -54,7 +69,7 @@ export class PostgresJobRepository implements JobPostingRepository {
         title, company, location, workplace_type, employment_type, seniority,
         salary_min_annual, salary_max_annual, currency, interval, raw_salary_text,
         description_text, date_posted, date_discovered, last_checked_at,
-        job_status, availability, availability_evidence,
+        job_status, availability, availability_evidence, availability_check_failures,
         jev_fit, jev_confidence,
         crawler_data, ai_analysis, user_overrides,
         created_at, updated_at
@@ -63,15 +78,16 @@ export class PostgresJobRepository implements JobPostingRepository {
         $8, $9, $10, $11, $12, $13,
         $14, $15, $16, $17, $18,
         $19, $20, $21, $22,
-        $23, $24, $25,
-        $26, $27,
-        $28, $29, $30,
-        $31, $32
+        $23, $24, $25, $26,
+        $27, $28,
+        $29, $30, $31,
+        $32, $33
       )
       ON CONFLICT (id) DO UPDATE SET
         last_checked_at = EXCLUDED.last_checked_at,
         availability = EXCLUDED.availability,
         availability_evidence = EXCLUDED.availability_evidence,
+        availability_check_failures = EXCLUDED.availability_check_failures,
         jev_fit = COALESCE(EXCLUDED.jev_fit, job_postings.jev_fit),
         jev_confidence = COALESCE(EXCLUDED.jev_confidence, job_postings.jev_confidence),
         crawler_data = EXCLUDED.crawler_data,
@@ -109,6 +125,7 @@ export class PostgresJobRepository implements JobPostingRepository {
       posting.job_status,
       posting.availability,
       posting.availability_evidence || null,
+      posting.availability_check_failures ?? 0,
 
       posting.jev_fit != null ? posting.jev_fit : null,
       posting.jev_confidence != null ? posting.jev_confidence : null,
@@ -128,7 +145,9 @@ export class PostgresJobRepository implements JobPostingRepository {
   async updateAvailability(id: string, availability: string, evidence?: string): Promise<void> {
     await this.pool.query(
       `UPDATE job_postings 
-       SET availability = $1, availability_evidence = $2, last_checked_at = NOW(), updated_at = NOW() 
+       SET availability = $1, availability_evidence = $2,
+           availability_check_failures = CASE WHEN $1 = 'open' THEN 0 ELSE availability_check_failures END,
+           last_checked_at = NOW(), updated_at = NOW()
        WHERE id = $3`,
       [availability, evidence || null, id]
     );
@@ -158,6 +177,7 @@ export class PostgresJobRepository implements JobPostingRepository {
     if (updates.availability) {
       setParts.push(`availability = $${pIdx++}`);
       params.push(updates.availability);
+      if (updates.availability === "open") setParts.push("availability_check_failures = 0");
     }
 
     const query = `UPDATE job_postings SET ${setParts.join(", ")} WHERE id = $1`;
@@ -289,6 +309,7 @@ export class PostgresJobRepository implements JobPostingRepository {
       job_status: row.job_status,
       availability: row.availability,
       availability_evidence: row.availability_evidence,
+      availability_check_failures: Number(row.availability_check_failures ?? 0),
 
       jev_fit: row.jev_fit != null ? Boolean(row.jev_fit) : null,
       jev_confidence: row.jev_confidence != null ? parseFloat(row.jev_confidence) : null,
@@ -370,6 +391,256 @@ export class PostgresJobRepository implements JobPostingRepository {
 
   async deleteConversation(id: string): Promise<void> {
     await this.pool.query("DELETE FROM conversations WHERE id = $1", [id]);
+  }
+
+  async reserveAiUsage(record: AiUsageRecord, budget?: DailyAiBudget): Promise<void> {
+    if (!budget || record.role !== "owner") {
+      await this.insertAiUsageRecord(record);
+      return;
+    }
+
+    const client = await this.pool.connect();
+    let committed = false;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock($1)", [741029382]);
+      const usage = await client.query(
+        `SELECT COUNT(*)::integer AS requests,
+                COALESCE(SUM(COALESCE(total_tokens, estimated_input_tokens)), 0)::integer AS tokens
+         FROM ai_usage
+         WHERE role = 'owner' AND started_at >= $1`,
+        [budget.starts_at]
+      );
+      const requests = Number(usage.rows[0]?.requests ?? 0);
+      const tokens = Number(usage.rows[0]?.tokens ?? 0);
+      if (requests >= budget.max_requests) {
+        throw new AiBudgetExceededError("requests", budget.max_requests, requests, budget.resets_at);
+      }
+      if (tokens + record.estimated_input_tokens > budget.max_tokens) {
+        throw new AiBudgetExceededError("tokens", budget.max_tokens, tokens, budget.resets_at);
+      }
+      await this.insertAiUsageRecord(record, client);
+      await client.query("COMMIT");
+      committed = true;
+    } catch (error) {
+      if (!committed) await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private async insertAiUsageRecord(record: AiUsageRecord, client: Pool | import("pg").PoolClient = this.pool): Promise<void> {
+    await client.query(
+      `INSERT INTO ai_usage (
+        id, role, provider, model, prompt_version, started_at, completed_at,
+        estimated_input_tokens, input_tokens, output_tokens, total_tokens,
+        latency_ms, status, error_code
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [
+        record.id,
+        record.role,
+        record.provider,
+        record.model,
+        record.prompt_version,
+        record.started_at,
+        record.completed_at,
+        record.estimated_input_tokens,
+        record.input_tokens,
+        record.output_tokens,
+        record.total_tokens,
+        record.latency_ms,
+        record.status,
+        record.error_code,
+      ]
+    );
+  }
+
+  async finishAiUsage(
+    id: string,
+    result: Pick<AiUsageRecord, "completed_at" | "input_tokens" | "output_tokens" | "total_tokens" | "latency_ms" | "status" | "error_code">
+  ): Promise<void> {
+    const updated = await this.pool.query(
+      `UPDATE ai_usage
+       SET completed_at = $2, input_tokens = $3, output_tokens = $4, total_tokens = $5,
+           latency_ms = $6, status = $7, error_code = $8
+       WHERE id = $1`,
+      [
+        id,
+        result.completed_at,
+        result.input_tokens,
+        result.output_tokens,
+        result.total_tokens,
+        result.latency_ms,
+        result.status,
+        result.error_code,
+      ]
+    );
+    if (updated.rowCount !== 1) throw new Error(`AI usage record ${id} does not exist`);
+  }
+
+  async getAiUsageSummary(startsAt: string): Promise<AiUsageSummary> {
+    const result = await this.pool.query(
+      `SELECT role, COUNT(*)::integer AS requests,
+              COALESCE(SUM(COALESCE(total_tokens, estimated_input_tokens)), 0)::integer AS tokens
+       FROM ai_usage
+       WHERE started_at >= $1
+       GROUP BY role`,
+      [startsAt]
+    );
+    const summary: AiUsageSummary = {
+      owner_requests: 0,
+      owner_tokens: 0,
+      guest_requests: 0,
+      guest_tokens: 0,
+    };
+    for (const row of result.rows) {
+      if (row.role === "owner") {
+        summary.owner_requests = Number(row.requests);
+        summary.owner_tokens = Number(row.tokens);
+      } else if (row.role === "guest") {
+        summary.guest_requests = Number(row.requests);
+        summary.guest_tokens = Number(row.tokens);
+      }
+    }
+    return summary;
+  }
+
+  async listRecommendationFeedback(jobPostingId: string): Promise<RecommendationFeedback[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM recommendation_feedback
+       WHERE job_posting_id = $1
+       ORDER BY created_at ASC, id ASC`,
+      [jobPostingId]
+    );
+    return result.rows.map((row) => this.mapRecommendationFeedbackRow(row));
+  }
+
+  async listActiveRecommendationFeedback(jobPostingIds: string[]): Promise<RecommendationFeedback[]> {
+    if (jobPostingIds.length === 0) return [];
+    const result = await this.pool.query(
+      `SELECT * FROM recommendation_feedback
+       WHERE job_posting_id = ANY($1::uuid[]) AND retracted_at IS NULL
+       ORDER BY created_at ASC, id ASC`,
+      [jobPostingIds]
+    );
+    return result.rows.map((row) => this.mapRecommendationFeedbackRow(row));
+  }
+
+  async recordRecommendationFeedback(
+    input: NewRecommendationFeedback
+  ): Promise<RecommendationFeedback> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const posting = await client.query(
+        "SELECT id FROM job_postings WHERE id = $1 FOR UPDATE",
+        [input.job_posting_id]
+      );
+      if (posting.rows.length === 0) {
+        throw new Error(`Job posting ${input.job_posting_id} does not exist`);
+      }
+      const replaced = await client.query(
+        `UPDATE recommendation_feedback
+         SET retracted_at = NOW(), retraction_reason = 'replaced'
+         WHERE job_posting_id = $1 AND retracted_at IS NULL
+         RETURNING id`,
+        [input.job_posting_id]
+      );
+      const inserted = await client.query(
+        `INSERT INTO recommendation_feedback (
+          id, job_posting_id, vote, reason_code, explanation, recommendation_snapshot, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING *`,
+        [
+          input.id,
+          input.job_posting_id,
+          input.vote,
+          input.reason_code ?? null,
+          input.explanation ?? null,
+          JSON.stringify(input.recommendation_snapshot),
+        ]
+      );
+      if (replaced.rows.length > 0) {
+        await client.query(
+          "UPDATE recommendation_feedback SET replaced_by_id = $2 WHERE id = ANY($1::uuid[])",
+          [replaced.rows.map((row) => row.id), input.id]
+        );
+      }
+      await client.query("COMMIT");
+      return this.mapRecommendationFeedbackRow(inserted.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async retractRecommendationFeedback(
+    jobPostingId: string
+  ): Promise<RecommendationFeedback | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const posting = await client.query(
+        "SELECT id FROM job_postings WHERE id = $1 FOR UPDATE",
+        [jobPostingId]
+      );
+      if (posting.rows.length === 0) {
+        await client.query("COMMIT");
+        return null;
+      }
+      const result = await client.query(
+        `UPDATE recommendation_feedback
+         SET retracted_at = NOW(), retraction_reason = 'user_retracted'
+         WHERE id = (
+           SELECT id FROM recommendation_feedback
+           WHERE job_posting_id = $1 AND retracted_at IS NULL
+           ORDER BY created_at DESC, id DESC
+           LIMIT 1
+           FOR UPDATE
+         )
+         RETURNING *`,
+        [jobPostingId]
+      );
+      await client.query("COMMIT");
+      return result.rows[0] ? this.mapRecommendationFeedbackRow(result.rows[0]) : null;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private mapRecommendationFeedbackRow(row: {
+    id: string;
+    job_posting_id: string;
+    vote: string;
+    reason_code: string | null;
+    explanation: string | null;
+    recommendation_snapshot: unknown;
+    created_at: Date | string;
+    retracted_at: Date | string | null;
+    replaced_by_id: string | null;
+    retraction_reason: string | null;
+  }): RecommendationFeedback {
+    const snapshot = typeof row.recommendation_snapshot === "string"
+      ? JSON.parse(row.recommendation_snapshot)
+      : row.recommendation_snapshot;
+    return RecommendationFeedbackSchema.parse({
+      id: row.id,
+      job_posting_id: row.job_posting_id,
+      vote: row.vote,
+      reason_code: row.reason_code,
+      explanation: row.explanation,
+      recommendation_snapshot: snapshot,
+      created_at: new Date(row.created_at).toISOString(),
+      retracted_at: row.retracted_at ? new Date(row.retracted_at).toISOString() : null,
+      replaced_by_id: row.replaced_by_id,
+      retraction_reason: row.retraction_reason,
+    });
   }
 
   // Application Tracking Methods
@@ -507,12 +778,402 @@ export class PostgresJobRepository implements JobPostingRepository {
     await this.pool.query("DELETE FROM applications WHERE id = $1", [id]);
   }
 
+  async createApplicationDraft(input: NewApplicationDraft): Promise<ApplicationDraft> {
+    const parsed = NewApplicationDraftSchema.parse(input);
+    if (parsed.draft_type === "application_answer" && !parsed.question?.trim()) {
+      throw new Error("Application-answer drafts require the original question");
+    }
+    if (parsed.sensitive && parsed.author !== "user") {
+      throw new Error("Sensitive application answers can only be authored by the user");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const existingJob = await client.query("SELECT 1 FROM job_postings WHERE id = $1", [
+        parsed.job_posting_id,
+      ]);
+      if (existingJob.rows.length === 0) {
+        throw new Error(`Job posting ${parsed.job_posting_id} not found for application draft`);
+      }
+      await client.query(
+        `INSERT INTO application_drafts (
+           id, job_posting_id, conversation_id, draft_type, question, sensitive, status,
+           current_version, created_at, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', 1, NOW(), NOW())`,
+        [
+          parsed.id,
+          parsed.job_posting_id,
+          parsed.conversation_id ?? null,
+          parsed.draft_type,
+          parsed.question ?? null,
+          parsed.sensitive ?? false,
+        ]
+      );
+      await client.query(
+        `INSERT INTO application_draft_versions (
+           draft_id, version, content, subject_line, source_facts, assumptions, author,
+           model_id, prompt_version
+         ) VALUES ($1, 1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8)`,
+        [
+          parsed.id,
+          parsed.content,
+          parsed.subject_line ?? null,
+          JSON.stringify(parsed.source_facts),
+          JSON.stringify(parsed.assumptions),
+          parsed.author,
+          parsed.model_id ?? null,
+          parsed.prompt_version ?? null,
+        ]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    const draft = await this.getApplicationDraft(parsed.id);
+    if (!draft) throw new Error(`Application draft ${parsed.id} was not persisted`);
+    return draft;
+  }
+
+  async getApplicationDraft(id: string): Promise<ApplicationDraft | null> {
+    const draftResult = await this.pool.query(
+      `SELECT id, job_posting_id, conversation_id, draft_type, question, sensitive, status,
+              current_version, created_at, updated_at
+       FROM application_drafts WHERE id = $1`,
+      [id]
+    );
+    const row = draftResult.rows[0];
+    if (!row) return null;
+    const versionResult = await this.pool.query(
+      `SELECT version, content, subject_line, source_facts, assumptions, author, model_id,
+              prompt_version, created_at, approved_at, approved_by
+       FROM application_draft_versions WHERE draft_id = $1 ORDER BY version`,
+      [id]
+    );
+    return this.mapApplicationDraft(row, versionResult.rows);
+  }
+
+  async listApplicationDrafts(
+    options?: ApplicationDraftListOptions
+  ): Promise<ApplicationDraft[]> {
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    if (options?.jobPostingId) {
+      values.push(options.jobPostingId);
+      conditions.push(`job_posting_id = $${values.length}`);
+    }
+    if (options?.draftType) {
+      values.push(options.draftType);
+      conditions.push(`draft_type = $${values.length}`);
+    }
+    if (options?.status) {
+      values.push(options.status);
+      conditions.push(`status = $${values.length}`);
+    }
+    if (options?.includeSensitive !== true) conditions.push("sensitive = FALSE");
+    if (options?.hasApprovedVersion) {
+      conditions.push(
+        "EXISTS (SELECT 1 FROM application_draft_versions v WHERE v.draft_id = application_drafts.id AND v.approved_at IS NOT NULL)"
+      );
+    }
+    values.push(Math.max(1, Math.min(options?.limit ?? 100, 500)));
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const draftsResult = await this.pool.query(
+      `SELECT id, job_posting_id, conversation_id, draft_type, question, sensitive, status,
+              current_version, created_at, updated_at
+       FROM application_drafts ${where}
+       ORDER BY updated_at DESC LIMIT $${values.length}`,
+      values
+    );
+    if (draftsResult.rows.length === 0) return [];
+    const ids = draftsResult.rows.map((row) => row.id);
+    const versionsResult = await this.pool.query(
+      `SELECT draft_id, version, content, subject_line, source_facts, assumptions, author,
+              model_id, prompt_version, created_at, approved_at, approved_by
+       FROM application_draft_versions
+       WHERE draft_id = ANY($1::uuid[])
+       ORDER BY draft_id, version`,
+      [ids]
+    );
+    const versionsByDraft = new Map<string, typeof versionsResult.rows>();
+    for (const version of versionsResult.rows) {
+      const versions = versionsByDraft.get(version.draft_id) || [];
+      versions.push(version);
+      versionsByDraft.set(version.draft_id, versions);
+    }
+    return draftsResult.rows.map((row) =>
+      this.mapApplicationDraft(row, versionsByDraft.get(row.id) || [])
+    );
+  }
+
+  async updateApplicationDraft(id: string, content: string): Promise<ApplicationDraft | null> {
+    if (content.trim().length === 0 || content.length > 20_000) {
+      throw new Error("Draft text must contain 1 to 20,000 characters");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const draftResult = await client.query(
+        `SELECT current_version FROM application_drafts WHERE id = $1 FOR UPDATE`,
+        [id]
+      );
+      const row = draftResult.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const currentVersion = Number(row.current_version);
+      const newVersion = currentVersion + 1;
+      const source = await client.query(
+        `SELECT subject_line, source_facts, assumptions
+         FROM application_draft_versions WHERE draft_id = $1 AND version = $2`,
+        [id, currentVersion]
+      );
+      if (!source.rows[0]) throw new Error(`Current version is missing for application draft ${id}`);
+      const current = source.rows[0];
+      await client.query(
+        `INSERT INTO application_draft_versions (
+           draft_id, version, content, subject_line, source_facts, assumptions, author,
+           model_id, prompt_version, created_at
+         ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, 'user', NULL, NULL, NOW())`,
+        [
+          id,
+          newVersion,
+          content,
+          current.subject_line,
+          JSON.stringify(this.parseJsonArray<ApplicationDraftSourceFact>(current.source_facts)),
+          JSON.stringify(this.parseJsonArray<string>(current.assumptions)),
+        ]
+      );
+      await client.query(
+        `UPDATE application_drafts SET current_version = $2, status = 'draft', updated_at = NOW()
+         WHERE id = $1`,
+        [id, newVersion]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    return this.getApplicationDraft(id);
+  }
+
+  async approveApplicationDraft(id: string): Promise<ApplicationDraft | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const draftResult = await client.query(
+        `SELECT current_version FROM application_drafts WHERE id = $1 FOR UPDATE`,
+        [id]
+      );
+      const row = draftResult.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      await client.query(
+        `UPDATE application_draft_versions
+         SET approved_at = COALESCE(approved_at, NOW()), approved_by = 'owner'
+         WHERE draft_id = $1 AND version = $2`,
+        [id, row.current_version]
+      );
+      await client.query(
+        `UPDATE application_drafts SET status = 'approved', updated_at = NOW() WHERE id = $1`,
+        [id]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    return this.getApplicationDraft(id);
+  }
+
   // Discovery Run & Metrics Querying
   async getMetrics(options?: { startDate?: string; endDate?: string }) {
     const postRes = await this.pool.query("SELECT id, source, job_status, jev_fit, date_discovered, created_at FROM job_postings");
     const appRes = await this.pool.query("SELECT id, job_posting_id, status, applied_at, created_at FROM applications");
 
     return calculateDashboardMetrics(postRes.rows, appRes.rows, options);
+  }
+
+  async saveDiscoveryRun(run: DiscoveryRun): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO discovery_runs (
+         id, batch_id, source, trigger_type, status, total_found, new_imported,
+         duplicates_seen, filtered_out, screened_with_jev, recommended, error_count, error_message,
+         attempt_count, started_at, completed_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       ON CONFLICT (id) DO UPDATE SET
+         status = EXCLUDED.status,
+         total_found = EXCLUDED.total_found,
+         new_imported = EXCLUDED.new_imported,
+         duplicates_seen = EXCLUDED.duplicates_seen,
+         filtered_out = EXCLUDED.filtered_out,
+         screened_with_jev = EXCLUDED.screened_with_jev,
+         recommended = EXCLUDED.recommended,
+         error_count = EXCLUDED.error_count,
+         error_message = EXCLUDED.error_message,
+         attempt_count = EXCLUDED.attempt_count,
+         started_at = EXCLUDED.started_at,
+         completed_at = EXCLUDED.completed_at`,
+      [
+        run.id,
+        run.batch_id,
+        run.source,
+        run.trigger_type,
+        run.status,
+        run.total_found,
+        run.new_imported,
+        run.duplicates_seen,
+        run.filtered_out,
+        run.screened_with_jev,
+        run.recommended,
+        run.error_count,
+        run.error_message,
+        run.attempt_count,
+        run.started_at,
+        run.completed_at,
+      ]
+    );
+  }
+
+  async listDiscoveryRuns(options?: {
+    limit?: number;
+    status?: DiscoveryRun["status"];
+  }): Promise<DiscoveryRun[]> {
+    const limit = Math.max(1, Math.min(options?.limit ?? 50, 500));
+    const params: unknown[] = [];
+    let statusClause = "";
+    if (options?.status) {
+      params.push(options.status);
+      statusClause = "WHERE status = $1";
+    }
+    params.push(limit);
+    const result = await this.pool.query(
+      `SELECT id, batch_id, source, trigger_type, status, total_found, new_imported,
+              duplicates_seen, filtered_out, screened_with_jev, recommended, error_count, error_message,
+              attempt_count, started_at, completed_at
+       FROM discovery_runs ${statusClause}
+       ORDER BY started_at DESC LIMIT $${params.length}`,
+      params
+    );
+    return result.rows.map((row) => this.mapDiscoveryRun(row));
+  }
+
+  async claimDiscoveryRun(id: string, maxAttempts: number): Promise<DiscoveryRun | null> {
+    const result = await this.pool.query(
+      `UPDATE discovery_runs
+       SET status = 'running', attempt_count = attempt_count + 1,
+           started_at = NOW(), completed_at = NULL
+       WHERE id = $1 AND status = 'queued' AND attempt_count < $2
+       RETURNING id, batch_id, source, trigger_type, status, total_found, new_imported,
+                 duplicates_seen, filtered_out, screened_with_jev, recommended, error_count, error_message,
+                 attempt_count, started_at, completed_at`,
+      [id, maxAttempts]
+    );
+    return result.rows[0] ? this.mapDiscoveryRun(result.rows[0]) : null;
+  }
+
+  async recoverInterruptedDiscoveryRuns(staleBefore: string, maxAttempts: number): Promise<number> {
+    const result = await this.pool.query(
+      `UPDATE discovery_runs
+       SET status = CASE WHEN attempt_count < $2 THEN 'queued' ELSE 'failed' END,
+           error_message = COALESCE(
+             error_message,
+             CASE WHEN attempt_count < $2
+               THEN 'Interrupted while running; queued for recovery'
+               ELSE 'Interrupted while running; retry limit exhausted'
+             END
+           ),
+           error_count = GREATEST(error_count, 1),
+           completed_at = CASE WHEN attempt_count < $2 THEN NULL ELSE NOW() END
+       WHERE status = 'running' AND started_at < $1`,
+      [new Date(staleBefore), maxAttempts]
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async recordAvailabilityCheck(
+    id: string,
+    status: "open" | "closed" | "unknown",
+    evidence: string,
+    checkedAt = new Date().toISOString()
+  ): Promise<number> {
+    const result = await this.pool.query(
+      `UPDATE job_postings
+       SET availability = $1,
+           availability_evidence = $2,
+           availability_check_failures = CASE WHEN $1 = 'unknown'
+             THEN availability_check_failures + 1 ELSE 0 END,
+           last_checked_at = $3,
+           updated_at = $3
+       WHERE id = $4
+       RETURNING availability_check_failures`,
+      [status, evidence, new Date(checkedAt), id]
+    );
+    return result.rows[0]?.availability_check_failures ?? 0;
+  }
+
+  private mapDiscoveryRun(row: any): DiscoveryRun {
+    return {
+      id: row.id,
+      batch_id: row.batch_id,
+      source: row.source,
+      trigger_type: row.trigger_type,
+      status: row.status,
+      total_found: Number(row.total_found ?? 0),
+      new_imported: Number(row.new_imported ?? 0),
+      duplicates_seen: Number(row.duplicates_seen ?? 0),
+      filtered_out: Number(row.filtered_out ?? 0),
+      screened_with_jev: Number(row.screened_with_jev ?? 0),
+      recommended: Number(row.recommended ?? 0),
+      error_count: Number(row.error_count ?? 0),
+      error_message: row.error_message,
+      attempt_count: Number(row.attempt_count ?? 0),
+      started_at: new Date(row.started_at).toISOString(),
+      completed_at: row.completed_at ? new Date(row.completed_at).toISOString() : null,
+    };
+  }
+
+  private parseJsonArray<T>(value: unknown): T[] {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  }
+
+  private mapApplicationDraft(row: any, versionRows: any[]): ApplicationDraft {
+    const versions: ApplicationDraftVersion[] = versionRows.map((version) => ({
+      version: Number(version.version),
+      content: version.content,
+      subject_line: version.subject_line,
+      source_facts: this.parseJsonArray<ApplicationDraftSourceFact>(version.source_facts),
+      assumptions: this.parseJsonArray<string>(version.assumptions),
+      author: version.author,
+      model_id: version.model_id,
+      prompt_version: version.prompt_version,
+      created_at: new Date(version.created_at).toISOString(),
+      approved_at: version.approved_at ? new Date(version.approved_at).toISOString() : null,
+      approved_by: version.approved_by,
+    }));
+    return ApplicationDraftSchema.parse({
+      id: row.id,
+      job_posting_id: row.job_posting_id,
+      conversation_id: row.conversation_id,
+      draft_type: row.draft_type,
+      question: row.question,
+      sensitive: row.sensitive,
+      status: row.status,
+      current_version: Number(row.current_version),
+      versions,
+      created_at: new Date(row.created_at).toISOString(),
+      updated_at: new Date(row.updated_at).toISOString(),
+    });
   }
 
   async saveUserProfile(key: string, data: any): Promise<void> {

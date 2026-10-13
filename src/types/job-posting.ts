@@ -190,6 +190,7 @@ export const UnifiedJobPostingSchema = z.object({
   job_status: JobWorkflowStatusSchema.default("discovered"),
   availability: PostingAvailabilitySchema.default("unknown"),
   availability_evidence: z.string().nullable().optional(),
+  availability_check_failures: z.number().int().nonnegative().optional(),
 
   // Automated Fit Classification (TypeSafe AI JEV)
   jev_fit: z.boolean().nullable().optional(),
@@ -219,6 +220,54 @@ export const JobStatusHistorySchema = z.object({
 });
 export type JobStatusHistory = z.infer<typeof JobStatusHistorySchema>;
 
+export const RecommendationFeedbackReasonSchema = z.enum([
+  "title",
+  "seniority",
+  "skills",
+  "company",
+  "industry",
+  "compensation",
+  "location",
+  "workplace_type",
+  "responsibilities",
+  "culture",
+  "duplicate_irrelevant",
+  "other",
+]);
+
+export const RecommendationFeedbackSnapshotSchema = z.object({
+  version: z.string().min(1).max(64),
+  captured_at: z.string().datetime(),
+  jev_fit: z.boolean().nullable(),
+  jev_confidence: z.number().min(0).max(1).nullable(),
+  overall_fit_score: z.number().min(0).max(100).nullable(),
+  recommendation: z.enum(["recommend", "consider", "reject"]).nullable(),
+  ai_confidence: z.number().min(0).max(1).nullable(),
+  provider: z.string().max(64).nullable(),
+  model_id: z.string().max(255).nullable(),
+  prompt_version: z.string().max(128).nullable(),
+});
+export type RecommendationFeedbackSnapshot = z.infer<typeof RecommendationFeedbackSnapshotSchema>;
+
+export function createRecommendationFeedbackSnapshot(
+  job: UnifiedJobPosting,
+  capturedAt = new Date().toISOString()
+): RecommendationFeedbackSnapshot {
+  const analysis = job.ai_analysis;
+  return {
+    version: "recommendation-snapshot-v1",
+    captured_at: capturedAt,
+    jev_fit: job.jev_fit ?? null,
+    jev_confidence: job.jev_confidence ?? null,
+    overall_fit_score: analysis?.overall_fit_score ?? null,
+    recommendation: analysis?.recommendation ?? null,
+    ai_confidence: analysis?.confidence ?? null,
+    provider: analysis?.provider ?? null,
+    model_id: analysis?.model_id ?? null,
+    prompt_version: analysis?.prompt_version ?? null,
+  };
+}
+
 /**
  * Explicit Feedback Entity (feedback-learning.md)
  */
@@ -226,30 +275,19 @@ export const RecommendationFeedbackSchema = z.object({
   id: z.string().uuid(),
   job_posting_id: z.string().uuid(),
   vote: z.enum(["up", "down"]),
-  reason_code: z.enum([
-    "title",
-    "seniority",
-    "skills",
-    "company",
-    "industry",
-    "compensation",
-    "location",
-    "workplace_type",
-    "responsibilities",
-    "culture",
-    "duplicate_irrelevant",
-    "other",
-  ]).nullable().optional(),
-  explanation: z.string().nullable().optional(),
-  recommendation_snapshot: z.object({
-    overall_fit_score: z.number().optional(),
-    model_id: z.string().optional(),
-    prompt_version: z.string().optional(),
-  }).optional(),
+  reason_code: RecommendationFeedbackReasonSchema.nullable().optional(),
+  explanation: z.string().max(2_000).nullable().optional(),
+  recommendation_snapshot: RecommendationFeedbackSnapshotSchema,
   created_at: z.string(),
   retracted_at: z.string().nullable().optional(),
+  replaced_by_id: z.string().uuid().nullable().optional(),
+  retraction_reason: z.enum(["replaced", "user_retracted"]).nullable().optional(),
 });
 export type RecommendationFeedback = z.infer<typeof RecommendationFeedbackSchema>;
+export type NewRecommendationFeedback = Pick<
+  RecommendationFeedback,
+  "id" | "job_posting_id" | "vote" | "reason_code" | "explanation" | "recommendation_snapshot"
+>;
 
 /**
  * Application Tracking Entity (data.md section 111)
