@@ -57,11 +57,12 @@ export class GreenhouseAdapter implements SourceAdapter {
     companyName?: string;
     includeContent?: boolean;
     searchTerm?: string;
+    signal?: AbortSignal;
   }): Promise<RawJobPosting[]> {
-    const { boardToken, companyName, includeContent = true, searchTerm } = params;
+    const { boardToken, companyName, includeContent = true, searchTerm, signal } = params;
     const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(boardToken)}/jobs?content=${includeContent ? "true" : "false"}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       throw new Error(`Greenhouse API responded with HTTP ${res.status} for board '${boardToken}'`);
     }
@@ -111,7 +112,7 @@ export class GreenhouseAdapter implements SourceAdapter {
    */
   async checkAvailability(
     sourceJobId: string,
-    extra?: { boardToken?: string }
+    extra?: { boardToken?: string; signal?: AbortSignal }
   ): Promise<{ status: "open" | "closed" | "unknown"; evidence?: string }> {
     const boardToken = extra?.boardToken;
     if (!boardToken) {
@@ -123,7 +124,7 @@ export class GreenhouseAdapter implements SourceAdapter {
 
     try {
       const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(boardToken)}/jobs/${encodeURIComponent(sourceJobId)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: extra.signal });
       if (res.status === 200) {
         return { status: "open", evidence: "Found active job record via Greenhouse API" };
       }

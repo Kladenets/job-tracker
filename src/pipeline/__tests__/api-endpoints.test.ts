@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { sourceRegistry } from "../../adapters";
 import { jevClassifier } from "../../ai/jev-classifier";
+import { createRecommendationFeedbackSnapshot } from "../../types/job-posting";
 import { fetchSafeResumeText } from "../../utils/safe-resume-fetch";
 
 console.log("=== Running End-to-End HTTP API Endpoint Tests ===");
@@ -197,6 +198,7 @@ async function runApiTests() {
   process.env.NODE_ENV = "test";
   process.env.JOB_TRACKER_FORCE_FILE = "true";
   process.env.JOB_TRACKER_STORE_PATH = path.join(testDataDirectory, "job_tracker_store.json");
+  process.env.DISCOVERY_RETRY_BASE_DELAY_MS = "0";
   const initializedRepository = await initializeRepository();
   assert.strictEqual(initializedRepository.engine, "file", "Test mode can explicitly initialize the isolated file repository");
   const app = (await import("../../server.js")).default;
@@ -219,6 +221,9 @@ async function runApiTests() {
     assert.ok(["development", "guest", "owner_free", "owner_pro", "none"].includes(
       ownerSystemHealthRes.body.aiProviders.geminiInteractions.tier
     ));
+    assert.equal(typeof ownerSystemHealthRes.body.aiUsage.outboundEnabled, "boolean");
+    assert.equal(typeof ownerSystemHealthRes.body.aiUsage.ownerBudget.dailyRequestLimit, "number");
+    assert.equal(ownerSystemHealthRes.body.aiUsage.guestUsage.applicationBudget, null);
     const dbStatusRes = await makeRequest(testServer, { method: "GET", path: "/api/db/status" });
     assert.strictEqual(dbStatusRes.statusCode, 200);
     assert.strictEqual(typeof dbStatusRes.body.postgres.connected, "boolean");
@@ -337,15 +342,33 @@ async function runApiTests() {
       body: {
         ...searchRes.body.profile,
         name: "Updated Full-Stack Remote",
+        deterministicFilterRules: {
+          ...searchRes.body.profile.deterministicFilterRules,
+          postingAge: { maxAgeDays: 60 },
+        },
       },
     });
     assert.strictEqual(putSearchRes.statusCode, 200, "Search profile PUT returns 200");
     assert.strictEqual(putSearchRes.body.profile.name, "Updated Full-Stack Remote");
+    assert.strictEqual(putSearchRes.body.profile.deterministicFilterRules.postingAge.maxAgeDays, 60);
     const persistedSearchRes = await makeRequest(testServer, {
       method: "GET",
       path: "/api/search-profile",
     });
     assert.strictEqual(persistedSearchRes.body.profile.name, "Updated Full-Stack Remote");
+    assert.strictEqual(persistedSearchRes.body.profile.deterministicFilterRules.postingAge.maxAgeDays, 60);
+    const invalidSearchRes = await makeRequest(testServer, {
+      method: "PUT",
+      path: "/api/search-profile",
+      body: {
+        ...persistedSearchRes.body.profile,
+        deterministicFilterRules: {
+          ...persistedSearchRes.body.profile.deterministicFilterRules,
+          postingAge: { maxAgeDays: 0 },
+        },
+      },
+    });
+    assert.strictEqual(invalidSearchRes.statusCode, 400, "Out-of-range posting-age settings are rejected");
     console.log("✓ GET & PUT /api/search-profile persisted to repository");
 
     // 3. Test POST /api/jobs/manual to create a test job
@@ -367,6 +390,97 @@ async function runApiTests() {
     const createdJob = manualJobRes.body.result.items[0];
     assert.ok(createdJob.id, "Created job has an ID");
     console.log(`✓ POST /api/jobs/manual created job ${createdJob.id}`);
+
+    const draftCreateRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/application-drafts",
+      body: {
+        job_posting_id: createdJob.id,
+        draft_type: "application_answer",
+        question: "Describe your experience with PostgreSQL.",
+        content: "I have used PostgreSQL in my work.",
+      },
+    });
+    assert.strictEqual(draftCreateRes.statusCode, 201);
+    assert.strictEqual(draftCreateRes.body.draft.status, "draft");
+    assert.strictEqual(draftCreateRes.body.draft.versions[0].author, "user");
+    const createdAnswerDraft = draftCreateRes.body.draft;
+    const draftUpdateRes = await makeRequest(testServer, {
+      method: "PATCH",
+      path: `/api/application-drafts/${createdAnswerDraft.id}`,
+      body: { content: "Edited application answer." },
+    });
+    assert.strictEqual(draftUpdateRes.statusCode, 200);
+    assert.strictEqual(draftUpdateRes.body.draft.versions.length, 2);
+    assert.strictEqual(draftUpdateRes.body.draft.versions[0].content, "I have used PostgreSQL in my work.");
+    const draftApproveRes = await makeRequest(testServer, {
+      method: "POST",
+      path: `/api/application-drafts/${createdAnswerDraft.id}/approve`,
+    });
+    assert.strictEqual(draftApproveRes.statusCode, 200);
+    assert.strictEqual(draftApproveRes.body.draft.status, "approved");
+    assert.ok(draftApproveRes.body.draft.versions[1].approved_at);
+    const sensitiveUserDraftRes = await makeRequest(testServer, {
+      method: "POST",
+      path: "/api/application-drafts",
+      body: {
+        job_posting_id: createdJob.id,
+        draft_type: "application_answer",
+        question: "Describe a disability accommodation you need.",
+        content: "User-authored sensitive answer.",
+      },
+    });
+    assert.strictEqual(sensitiveUserDraftRes.statusCode, 201);
+    assert.strictEqual(sensitiveUserDraftRes.body.draft.sensitive, true);
+    const draftListRes = await makeRequest(testServer, { method: "GET", path: "/api/application-drafts" });
+    assert.strictEqual(draftListRes.statusCode, 200);
+    assert.ok(draftListRes.body.drafts.some((draft: any) => draft.id === sensitiveUserDraftRes.body.draft.id));
+    assert.strictEqual(
+      (await makeRequest(testServer, {
+        method: "POST",
+        path: "/api/application-drafts",
+        body: { job_posting_id: createdJob.id, draft_type: "application_answer", content: "Missing question" },
+      })).statusCode,
+      400,
+      "Application-answer drafts require the original question"
+    );
+    console.log("✓ Application drafts preserve edits, explicit approval, and user-only sensitive answers");
+
+    const feedbackPath = `/api/jobs/${createdJob.id}/feedback`;
+    const emptyFeedbackRes = await makeRequest(testServer, { method: "GET", path: feedbackPath });
+    assert.strictEqual(emptyFeedbackRes.statusCode, 200);
+    assert.deepStrictEqual(emptyFeedbackRes.body.feedback, [], "A new job has no implicit vote");
+    const feedbackSnapshot = createRecommendationFeedbackSnapshot(createdJob);
+    const invalidVoteRes = await makeRequest(testServer, {
+      method: "POST",
+      path: feedbackPath,
+      body: {
+        vote: "up",
+        reason_code: "salary",
+        recommendation_snapshot: feedbackSnapshot,
+      },
+    });
+    assert.strictEqual(invalidVoteRes.statusCode, 400, "Unknown feedback reasons must be rejected");
+    assert.deepStrictEqual(
+      (await makeRequest(testServer, { method: "GET", path: feedbackPath })).body.feedback,
+      [],
+      "Invalid feedback payloads must not create events"
+    );
+    const initialVoteRes = await makeRequest(testServer, {
+      method: "POST",
+      path: feedbackPath,
+      body: {
+        vote: "up",
+        reason_code: "skills",
+        explanation: "Relevant experience and stack",
+        recommendation_snapshot: feedbackSnapshot,
+      },
+    });
+    assert.strictEqual(initialVoteRes.statusCode, 201);
+    assert.strictEqual(initialVoteRes.body.feedback.vote, "up");
+    assert.strictEqual(initialVoteRes.body.feedback.reason_code, "skills");
+    assert.deepStrictEqual(initialVoteRes.body.feedback.recommendation_snapshot, feedbackSnapshot);
+    assert.ok(initialVoteRes.body.feedback.created_at);
 
     // 4. Test PATCH /api/jobs/:id/status
     console.log("[Test 4] Testing PATCH /api/jobs/:id/status...");
@@ -400,6 +514,52 @@ async function runApiTests() {
     });
     assert.strictEqual(statusPatchRes.statusCode, 200, "Status patch returns 200");
     assert.strictEqual(statusPatchRes.body.job.job_status, "saved", "Job status updated to saved");
+    const feedbackAfterSave = await makeRequest(testServer, { method: "GET", path: feedbackPath });
+    assert.strictEqual(feedbackAfterSave.body.feedback.length, 1, "Saving is not another feedback event");
+    assert.strictEqual(feedbackAfterSave.body.active.vote, "up", "Saving does not retract an explicit vote");
+
+    const replacementVoteRes = await makeRequest(testServer, {
+      method: "POST",
+      path: feedbackPath,
+      body: {
+        vote: "down",
+        reason_code: "compensation",
+        explanation: "Compensation is below my target",
+        recommendation_snapshot: feedbackSnapshot,
+      },
+    });
+    assert.strictEqual(replacementVoteRes.statusCode, 201);
+    const replacedHistoryRes = await makeRequest(testServer, { method: "GET", path: feedbackPath });
+    assert.strictEqual(replacedHistoryRes.body.feedback.length, 2);
+    assert.strictEqual(replacedHistoryRes.body.feedback[0].retraction_reason, "replaced");
+    assert.strictEqual(
+      replacedHistoryRes.body.feedback[0].replaced_by_id,
+      replacementVoteRes.body.feedback.id
+    );
+    assert.strictEqual(replacedHistoryRes.body.active.vote, "down");
+
+    const jobsWithVoteRes = await makeRequest(testServer, { method: "GET", path: "/api/jobs?limit=150" });
+    assert.strictEqual(jobsWithVoteRes.body.feedback[createdJob.id].vote, "down");
+    const retractedVoteRes = await makeRequest(testServer, { method: "DELETE", path: feedbackPath });
+    assert.strictEqual(retractedVoteRes.statusCode, 200);
+    assert.strictEqual(retractedVoteRes.body.feedback.retraction_reason, "user_retracted");
+    const historyAfterRetraction = await makeRequest(testServer, { method: "GET", path: feedbackPath });
+    assert.strictEqual(historyAfterRetraction.body.active, null);
+    assert.strictEqual(historyAfterRetraction.body.feedback.length, 2);
+    const dismissWithoutVote = await makeRequest(testServer, {
+      method: "PATCH",
+      path: `/api/jobs/${createdJob.id}/status`,
+      body: { status: "dismissed" },
+    });
+    assert.strictEqual(dismissWithoutVote.statusCode, 200);
+    assert.strictEqual(
+      (await makeRequest(testServer, { method: "GET", path: feedbackPath })).body.feedback.length,
+      2,
+      "Dismissing a job must not create a vote"
+    );
+    const jobsAfterRetractionRes = await makeRequest(testServer, { method: "GET", path: "/api/jobs?limit=150" });
+    assert.ok(!(createdJob.id in jobsAfterRetractionRes.body.feedback));
+    console.log("✓ Explicit votes capture reasons/snapshots and preserve replacement/retraction history");
     const statusRepository = getRepository().repository;
     const originalUpdateStatus = statusRepository.updateStatus;
     const recordedStatusActors: string[] = [];
@@ -612,6 +772,58 @@ async function runApiTests() {
       assert.strictEqual(completeDiscoveryRes.body.details[0].screenedWithJev, 2);
       assert.strictEqual(completeDiscoveryRes.body.recommendedCount, 1, "Only positive JEV fits count as recommendations");
 
+      const storedRunsRes = await makeRequest(testServer, {
+        method: "GET",
+        path: "/api/discovery/runs?limit=10",
+      });
+      assert.strictEqual(storedRunsRes.statusCode, 200);
+      const successfulRun = storedRunsRes.body.runs.find(
+        (run: { batch_id: string }) => run.batch_id === completeDiscoveryRes.body.batchId
+      );
+      assert.strictEqual(successfulRun.status, "completed");
+      assert.strictEqual(successfulRun.total_found, 2);
+      assert.strictEqual(successfulRun.recommended, 1);
+      assert.strictEqual(successfulRun.trigger_type, "manual");
+
+      const discoveryJob = (await getRepository().repository.listPostings({
+        company: "Discovery Fit Co",
+        limit: 1,
+      }))[0];
+      const originalAvailabilityCheck = greenhouseAdapter.checkAvailability;
+      const evidenceStatuses = ["unknown", "unknown", "closed"] as const;
+      let availabilityCheckIndex = 0;
+      try {
+        greenhouseAdapter.checkAvailability = async (_jobId, extra) => {
+          assert.strictEqual(extra?.boardToken, "test");
+          assert.ok(extra?.signal instanceof AbortSignal);
+          const status = evidenceStatuses[availabilityCheckIndex++];
+          return {
+            status,
+            evidence: status === "closed"
+              ? "Greenhouse API explicitly returned 404"
+              : "Transient HTTP 503; source state is inconclusive",
+          };
+        };
+        for (const [index, expectedFailures] of [1, 2, 0].entries()) {
+          const availabilityRes = await makeRequest(testServer, {
+            method: "POST",
+            path: `/api/jobs/${discoveryJob.id}/check-availability`,
+          });
+          assert.strictEqual(availabilityRes.statusCode, 200);
+          assert.strictEqual(availabilityRes.body.consecutiveFailures, expectedFailures);
+          assert.strictEqual(
+            availabilityRes.body.status,
+            evidenceStatuses[index],
+            "Availability is updated only from the adapter's evidence result"
+          );
+        }
+      } finally {
+        greenhouseAdapter.checkAvailability = originalAvailabilityCheck;
+      }
+      const checkedDiscoveryJob = await getRepository().repository.getById(discoveryJob.id);
+      assert.strictEqual(checkedDiscoveryJob?.availability, "closed");
+      assert.strictEqual(checkedDiscoveryJob?.availability_check_failures, 0);
+
       greenhouseAdapter.fetchJobs = async () => [];
       leverAdapter.fetchJobs = async () => {
         throw new Error("Lever unavailable for test");
@@ -625,6 +837,7 @@ async function runApiTests() {
       assert.strictEqual(partialDiscoveryRes.body.status, "partial");
       assert.strictEqual(partialDiscoveryRes.body.success, false);
       assert.strictEqual(partialDiscoveryRes.body.details[1].status, "failed");
+      assert.strictEqual(partialDiscoveryRes.body.details[1].attemptCount, 2);
       assert.match(partialDiscoveryRes.body.details[1].error, /Lever unavailable/);
 
       greenhouseAdapter.fetchJobs = async () => {
@@ -716,12 +929,19 @@ async function runApiTests() {
     assert.ok(!("persistence" in guestReadinessRes.body));
     const guestSystemHealthRes = await makeRequest(testServer, { method: "GET", path: "/api/system/health" });
     assert.strictEqual(guestSystemHealthRes.statusCode, 403, "Guest must not access owner system/provider telemetry");
+    const guestFeedbackRes = await makeRequest(testServer, {
+      method: "POST",
+      path: feedbackPath,
+      body: { vote: "up", recommendation_snapshot: feedbackSnapshot },
+    });
+    assert.strictEqual(guestFeedbackRes.statusCode, 403, "Guest sessions cannot create owner feedback");
 
     const guestJobsRes = await makeRequest(testServer, {
       method: "GET",
       path: "/api/jobs?limit=50",
     });
     assert.strictEqual(guestJobsRes.statusCode, 200);
+    assert.ok(!("feedback" in guestJobsRes.body), "Guest job lists must not expose owner feedback");
     const guestJob = guestJobsRes.body.postings.find((posting: any) => posting.id === createdJob.id);
     assert.ok(guestJob, "Guest can browse public job postings");
     const guestStatusFilteredRes = await makeRequest(testServer, {
@@ -756,6 +976,7 @@ async function runApiTests() {
       "/api/applications",
       "/api/dashboard/metrics",
       "/api/agent/conversations",
+      "/api/application-drafts",
     ]) {
       const privateRes = await makeRequest(testServer, { method: "GET", path: privatePath });
       assert.strictEqual(privateRes.statusCode, 403, `${privatePath} must be owner-only`);
@@ -781,6 +1002,28 @@ async function runApiTests() {
     });
     assert.strictEqual(guestChatRes.statusCode, 200, "Guest chat is available without owner authentication");
     assert.strictEqual(guestChatRes.body.aiTelemetry.role, "guest");
+    assert.strictEqual(
+      (await makeRequest(testServer, {
+        method: "POST",
+        path: "/api/application-drafts",
+        body: {
+          job_posting_id: createdJob.id,
+          draft_type: "cover_letter",
+          content: "Guest must not persist this.",
+        },
+      })).statusCode,
+      403,
+      "Guest users cannot create application drafts"
+    );
+    assert.strictEqual(
+      (await makeRequest(testServer, {
+        method: "POST",
+        path: `/api/jobs/${createdJob.id}/cover-letter`,
+        body: {},
+      })).statusCode,
+      403,
+      "Guest users cannot create owner cover-letter drafts"
+    );
 
     const afterGuestChat = await makeRequest(testServer, {
       method: "GET",

@@ -34,11 +34,12 @@ export class LeverAdapter implements SourceAdapter {
     company: string;
     searchTerm?: string;
     group?: string;
+    signal?: AbortSignal;
   }): Promise<RawJobPosting[]> {
-    const { company, searchTerm } = params;
+    const { company, searchTerm, signal } = params;
     const url = `https://api.lever.co/v0/postings/${encodeURIComponent(company)}?mode=json`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       throw new Error(`Lever API responded with HTTP ${res.status} for company '${company}'`);
     }
@@ -102,7 +103,7 @@ export class LeverAdapter implements SourceAdapter {
    */
   async checkAvailability(
     sourceJobId: string,
-    extra?: { company?: string }
+    extra?: { company?: string; signal?: AbortSignal }
   ): Promise<{ status: "open" | "closed" | "unknown"; evidence?: string }> {
     const company = extra?.company;
     if (!company) {
@@ -114,7 +115,7 @@ export class LeverAdapter implements SourceAdapter {
 
     try {
       const url = `https://api.lever.co/v0/postings/${encodeURIComponent(company)}/${encodeURIComponent(sourceJobId)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: extra.signal });
       if (res.status === 200) {
         return { status: "open", evidence: "Found active job record via Lever API" };
       }

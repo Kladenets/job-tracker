@@ -11,8 +11,16 @@ import { sourceRegistry } from "./adapters/index.js";
 import { LeverAdapter } from "./adapters/lever-adapter.js";
 import { Conversation } from "./ai/agent/conversation.js";
 import { GeminiAgent } from "./ai/agent/gemini-agent.js";
+import {
+  ApplicationDraftStatusSchema,
+  ApplicationDraftTypeSchema,
+  detectSensitiveApplicationQuestion,
+} from "./ai/application-drafts.js";
 import { geminiAgent } from "./ai/gemini-agent.js";
 import { resolveGeminiApiKey } from "./ai/key-resolver.js";
+import { quotaTracker } from "./ai/quota-tracker.js";
+import { getDailyAiBudget, isOutboundAiEnabled } from "./ai/usage-accounting.js";
+import { AiBudgetExceededError, AiOutboundDisabledError } from "./ai/usage-types.js";
 import { runJobSpyScraper } from "./bridges/jobspy-bridge.js";
 import { getSearchProfile, SearchProfileSchema } from "./config/search-profile.js";
 import { checkDatabaseConnection } from "./db/connection.js";
@@ -21,9 +29,16 @@ import { runMigrations } from "./db/migrations/migrator.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { ingestRawPostings } from "./pipeline/ingestion-pipeline.js";
 import {
+  executeDiscoveryBatch,
+  getDiscoveryRunnerSettings,
+  recoverAndResumeDiscoveryRuns,
+} from "./pipeline/discovery-runner.js";
+import {
   Application,
   ApplicationStatusSchema,
   JobWorkflowStatusSchema,
+  RecommendationFeedbackReasonSchema,
+  RecommendationFeedbackSnapshotSchema,
   UnifiedJobPosting,
 } from "./types/job-posting.js";
 import { JobSpyQuerySchema, RawJobPosting, RawJobPostingSchema } from "./types/job.js";
@@ -33,6 +48,7 @@ import {
   getCandidateResume,
   parseJsonResume,
 } from "./utils/resume-sync.js";
+import { buildApplicationDraftSourceFacts } from "./ai/application-drafts.js";
 import { fetchSafeResumeText, UnsafeResumeUrlError } from "./utils/safe-resume-fetch.js";
 
 dotenv.config();
@@ -42,6 +58,22 @@ const interactiveAgent = new GeminiAgent();
 // AI Studio dev server runs on port 3000 (nginx proxy runs on 8080)
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const host = "0.0.0.0";
+let scheduledDiscoveryTimer: NodeJS.Timeout | null = null;
+let scheduledDiscoveryRunning = false;
+
+function aiErrorStatus(error: unknown): number {
+  if (error instanceof AiBudgetExceededError) return 429;
+  if (error instanceof AiOutboundDisabledError) return 503;
+  return 500;
+}
+
+function requireOwner(req: Request, res: Response): boolean {
+  if (req.user?.role === "guest") {
+    res.status(403).json({ success: false, error: "This action is restricted to the owner." });
+    return false;
+  }
+  return true;
+}
 
 const GuestChatRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
@@ -50,6 +82,41 @@ const GuestChatRequestSchema = z.object({
     role: z.enum(["user", "assistant"]),
     content: z.string().max(4000),
   })).max(12).default([]),
+}).strict();
+
+const RecommendationFeedbackRequestSchema = z.object({
+  vote: z.enum(["up", "down"]),
+  reason_code: RecommendationFeedbackReasonSchema.nullable().optional(),
+  explanation: z.string().trim().max(2_000).nullable().optional(),
+  recommendation_snapshot: RecommendationFeedbackSnapshotSchema,
+}).strict();
+
+const ApplicationDraftCreateRequestSchema = z.object({
+  job_posting_id: z.string().uuid(),
+  draft_type: ApplicationDraftTypeSchema,
+  question: z.string().trim().min(1).max(2000).optional(),
+  content: z.string().trim().min(1).max(20000),
+  subject_line: z.string().trim().max(500).optional(),
+  sensitive: z.boolean().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.draft_type === "application_answer" && !value.question) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["question"],
+      message: "Application-answer drafts require the original question",
+    });
+  }
+  if (value.draft_type === "cover_letter" && value.question) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["question"],
+      message: "Cover-letter drafts do not accept a question",
+    });
+  }
+});
+
+const ApplicationDraftUpdateRequestSchema = z.object({
+  content: z.string().trim().min(1).max(20000),
 }).strict();
 
 function sanitizeGuestJob(posting: UnifiedJobPosting) {
@@ -77,6 +144,78 @@ function sanitizeGuestJob(posting: UnifiedJobPosting) {
     availability: posting.availability,
     availability_evidence: posting.availability_evidence,
   };
+}
+
+async function fetchDiscoverySource(source: string, signal: AbortSignal): Promise<RawJobPosting[]> {
+  const adapter = sourceRegistry.get(source);
+  if (!adapter) throw new Error(`Unsupported discovery source: ${source}`);
+
+  if (source === "greenhouse") {
+    return adapter.fetchJobs({ boardToken: "gitlab", searchTerm: "engineer", signal });
+  }
+  if (source === "lever") {
+    return adapter.fetchJobs({ company: "palantir", searchTerm: "engineer", signal });
+  }
+  if (source === "jobspy") {
+    return adapter.fetchJobs({
+      searchTerm: "Software Engineer",
+      location: "Remote",
+      sites: ["indeed"],
+      resultsWanted: 5,
+      signal,
+    });
+  }
+  return adapter.fetchJobs({ signal });
+}
+
+function startScheduledDiscovery(): void {
+  const configuredHours = Number(process.env.DISCOVERY_INTERVAL_HOURS ?? "24");
+  if (!Number.isFinite(configuredHours) || configuredHours <= 0) {
+    console.log("[Discovery] Scheduled runs disabled (DISCOVERY_INTERVAL_HOURS <= 0).");
+    return;
+  }
+  const intervalMs = Math.min(configuredHours, 24 * 30) * 60 * 60 * 1000;
+
+  const scheduleNext = async () => {
+    const { repository } = getRepository();
+    const previousRuns = await repository.listDiscoveryRuns({ limit: 500 });
+    const lastScheduled = previousRuns
+      .filter((run) => run.trigger_type === "scheduled")
+      .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0];
+    const dueAt = lastScheduled
+      ? Date.parse(lastScheduled.started_at) + intervalMs
+      : Date.now() + intervalMs;
+    const delay = Math.max(1_000, dueAt - Date.now());
+
+    scheduledDiscoveryTimer = setTimeout(async () => {
+      if (scheduledDiscoveryRunning) return;
+      scheduledDiscoveryRunning = true;
+      try {
+        const result = await executeDiscoveryBatch({
+          repository,
+          sources: sourceRegistry.list(),
+          triggerType: "scheduled",
+          fetchJobs: fetchDiscoverySource,
+          ingestJobs: (jobs) => ingestRawPostings(jobs, { customRepo: repository }),
+        });
+        if (result.status !== "complete") {
+          console.warn(`[Discovery] Scheduled batch ${result.batchId} completed with status ${result.status}.`);
+        }
+      } catch (error) {
+        console.error("[Discovery] Scheduled run failed:", error);
+      } finally {
+        scheduledDiscoveryRunning = false;
+        void scheduleNext().catch((error: unknown) => {
+          console.error("[Discovery] Failed to schedule the next run:", error);
+        });
+      }
+    }, delay);
+    scheduledDiscoveryTimer.unref();
+  };
+
+  void scheduleNext().catch((error: unknown) => {
+    console.error("[Discovery] Failed to initialize the scheduler:", error);
+  });
 }
 
 app.use(cors());
@@ -126,6 +265,8 @@ app.get("/api/system/health", async (req: Request, res: Response) => {
     (process.env.TYPESAFE_API_KEY && process.env.TYPESAFE_API_KEY.trim() !== "") ||
     (process.env.TYPESAFE_AI_API_KEY && process.env.TYPESAFE_AI_API_KEY.trim() !== "")
   );
+  const aiBudget = getDailyAiBudget();
+  const aiUsage = await repository.getAiUsageSummary(aiBudget.starts_at);
 
   res.json({
     status: "healthy",
@@ -149,6 +290,22 @@ app.get("/api/system/health", async (req: Request, res: Response) => {
         configured: hasJevKey,
         mode: hasJevKey ? "live" : "simulated-scoring",
       },
+    },
+    aiUsage: {
+      outboundEnabled: isOutboundAiEnabled(),
+      ownerBudget: {
+        dailyRequestLimit: aiBudget.max_requests,
+        dailyTokenLimit: aiBudget.max_tokens,
+        requestsUsed: aiUsage.owner_requests,
+        tokensUsed: aiUsage.owner_tokens,
+        resetsAt: aiBudget.resets_at,
+      },
+      guestUsage: {
+        requests: aiUsage.guest_requests,
+        tokens: aiUsage.guest_tokens,
+        applicationBudget: null,
+      },
+      providerQuota: quotaTracker.getOwnerStatus(keyInfo.tier),
     },
   });
 });
@@ -214,16 +371,104 @@ app.get("/api/jobs", async (req: Request, res: Response) => {
     const visiblePostings = isGuest
       ? postings.map(sanitizeGuestJob)
       : postings;
+    const activeFeedback = isGuest
+      ? []
+      : await repository.listActiveRecommendationFeedback(postings.map((posting) => posting.id));
 
     res.json({
       count: visiblePostings.length,
       limit,
       offset,
       postings: visiblePostings,
+      ...(!isGuest
+        ? { feedback: Object.fromEntries(activeFeedback.map((entry) => [entry.job_posting_id, entry])) }
+        : {}),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to query jobs";
     res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.get("/api/jobs/:id/feedback", async (req: Request, res: Response) => {
+  if (req.user?.role !== "owner") {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  const jobId = z.string().uuid().safeParse(req.params.id);
+  if (!jobId.success) {
+    return res.status(400).json({ success: false, error: "Invalid job ID" });
+  }
+  try {
+    const { repository } = getRepository();
+    if (!await repository.getById(jobId.data)) {
+      return res.status(404).json({ success: false, error: "Job posting not found" });
+    }
+    const history = await repository.listRecommendationFeedback(jobId.data);
+    return res.json({
+      success: true,
+      feedback: history,
+      active: history.find((entry) => !entry.retracted_at) || null,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to retrieve recommendation feedback";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.post("/api/jobs/:id/feedback", async (req: Request, res: Response) => {
+  if (req.user?.role !== "owner") {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  const jobId = z.string().uuid().safeParse(req.params.id);
+  if (!jobId.success) {
+    return res.status(400).json({ success: false, error: "Invalid job ID" });
+  }
+  const parsed = RecommendationFeedbackRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid recommendation feedback",
+      details: parsed.error.flatten(),
+    });
+  }
+  try {
+    const { repository } = getRepository();
+    if (!await repository.getById(jobId.data)) {
+      return res.status(404).json({ success: false, error: "Job posting not found" });
+    }
+    const feedback = await repository.recordRecommendationFeedback({
+      id: randomUUID(),
+      job_posting_id: jobId.data,
+      vote: parsed.data.vote,
+      reason_code: parsed.data.reason_code ?? null,
+      explanation: parsed.data.explanation || null,
+      recommendation_snapshot: parsed.data.recommendation_snapshot,
+    });
+    return res.status(201).json({ success: true, feedback });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to save recommendation feedback";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.delete("/api/jobs/:id/feedback", async (req: Request, res: Response) => {
+  if (req.user?.role !== "owner") {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  const jobId = z.string().uuid().safeParse(req.params.id);
+  if (!jobId.success) {
+    return res.status(400).json({ success: false, error: "Invalid job ID" });
+  }
+  try {
+    const { repository } = getRepository();
+    const feedback = await repository.retractRecommendationFeedback(jobId.data);
+    if (!feedback) {
+      return res.status(404).json({ success: false, error: "No active vote exists for this job" });
+    }
+    return res.json({ success: true, feedback });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to retract recommendation feedback";
+    return res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -662,101 +907,122 @@ app.post("/api/discovery/run", async (req: Request, res: Response) => {
       }
     }
 
-    let totalDiscovered = 0;
-    let totalRecommended = 0;
-    let totalFiltered = 0;
-    const details: any[] = [];
-    const runSource = async (
-      source: string,
-      fetchJobs: () => Promise<RawJobPosting[]>,
-      ingestLimit?: number
-    ) => {
-      let discovered = 0;
-      try {
-        const jobs = await fetchJobs();
-        discovered = jobs.length;
-        totalDiscovered += discovered;
-        const result = await ingestRawPostings(ingestLimit ? jobs.slice(0, ingestLimit) : jobs);
-        const recommendedCount = result.items.filter((item) => item.jevFit === true).length;
-        totalRecommended += recommendedCount;
-        totalFiltered += result.filteredOut;
-        details.push({
-          ...result,
-          source,
-          status: "succeeded",
-          discovered,
-          recommendedCount,
-          filteredOutCount: result.filteredOut,
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : `${source} discovery failed`;
-        console.warn(`${source} run error:`, err);
-        details.push({ source, status: "failed", discovered, error: message });
-      }
-    };
-
-    // 1. Greenhouse crawl
-    if (selectedSources.includes("greenhouse")) {
-      await runSource("greenhouse", async () => {
-        const gh = sourceRegistry.get("greenhouse") as GreenhouseAdapter;
-        return gh.fetchJobs({ boardToken: "gitlab", searchTerm: "engineer" });
-      }, 15);
-    }
-
-    // 2. Lever crawl
-    if (selectedSources.includes("lever")) {
-      await runSource("lever", async () => {
-        const lever = sourceRegistry.get("lever") as LeverAdapter;
-        return lever.fetchJobs({ company: "palantir", searchTerm: "engineer" });
-      }, 15);
-    }
-
-    // 3. JobSpy scrape
-    if (selectedSources.includes("jobspy")) {
-      await runSource("jobspy", async () => {
-        const scrape = await runJobSpyScraper({
-          searchTerm: "Software Engineer",
-          location: "Remote",
-          sites: ["indeed"],
-          resultsWanted: 5,
-        });
-        return scrape.jobs;
-      });
-    }
-
-    const completedSources = details.filter((detail) => detail.status === "succeeded").length;
-    const failedSources = details.filter((detail) => detail.status === "failed");
-    const status = failedSources.length === 0
-      ? "complete"
-      : completedSources === 0
-        ? "failed"
-        : "partial";
-    const summary = status === "complete"
-      ? `Discovery run completed across ${selectedSources.length} sources`
-      : status === "partial"
-        ? `Discovery run partially completed: ${completedSources} of ${selectedSources.length} sources succeeded`
-        : `Discovery run failed: all ${selectedSources.length} selected sources failed`;
-    const payload = {
-      success: status === "complete",
-      status,
-      summary,
-      discoveredCount: totalDiscovered,
-      recommendedCount: totalRecommended,
-      filteredOutCount: totalFiltered,
+    const { repository } = getRepository();
+    const payload = await executeDiscoveryBatch({
+      repository,
       sources: selectedSources,
-      details,
-      errors: failedSources.map(({ source, error }) => ({ source, error })),
-    };
+      triggerType: "manual",
+      fetchJobs: fetchDiscoverySource,
+      ingestJobs: (jobs) => ingestRawPostings(jobs, { customRepo: repository }),
+    });
 
-    if (status === "failed") {
+    if (payload.status === "failed") {
       return res.status(502).json({ ...payload, error: "All selected discovery sources failed" });
     }
-    if (status === "partial") {
+    if (payload.status === "partial") {
       return res.status(207).json(payload);
     }
     return res.json(payload);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Discovery run failed";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.get("/api/discovery/runs", async (req: Request, res: Response) => {
+  try {
+    const limitValue = typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
+    if (!Number.isInteger(limitValue) || limitValue < 1 || limitValue > 500) {
+      return res.status(400).json({ success: false, error: "limit must be an integer between 1 and 500" });
+    }
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    if (status && !["queued", "running", "completed", "failed"].includes(status)) {
+      return res.status(400).json({ success: false, error: "Invalid discovery run status" });
+    }
+    const { repository } = getRepository();
+    const runs = await repository.listDiscoveryRuns({
+      limit: limitValue,
+      status: status as "queued" | "running" | "completed" | "failed" | undefined,
+    });
+    return res.json({ success: true, runs });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to list discovery runs";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.post("/api/jobs/:id/check-availability", async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== "owner") {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+    const { repository } = getRepository();
+    const posting = await repository.getById(req.params.id);
+    if (!posting) return res.status(404).json({ success: false, error: "Job posting not found" });
+
+    const adapter = sourceRegistry.get(posting.source);
+    if (!adapter) {
+      return res.status(400).json({
+        success: false,
+        error: `No availability adapter is registered for source '${posting.source}'`,
+      });
+    }
+    if (!posting.source_job_id) {
+      const checkedAt = new Date().toISOString();
+      const evidence = "Posting has no source job identifier; availability is unknown";
+      const consecutiveFailures = await repository.recordAvailabilityCheck(
+        posting.id,
+        "unknown",
+        evidence,
+        checkedAt
+      );
+      return res.json({
+        success: true,
+        status: "unknown",
+        evidence,
+        checkedAt,
+        consecutiveFailures,
+      });
+    }
+
+    const postingUrl = posting.source_url || posting.canonical_url || "";
+    let extra: Record<string, unknown> = {};
+    try {
+      const url = new URL(postingUrl);
+      if (posting.source === "greenhouse") {
+        const boardToken = url.pathname.split("/").filter(Boolean)[0];
+        if (boardToken) extra.boardToken = boardToken;
+      } else if (posting.source === "lever") {
+        const company = url.pathname.split("/").filter(Boolean)[0];
+        if (company) extra.company = company;
+      } else if (posting.source === "weworkremotely") {
+        extra.url = url.toString();
+      }
+    } catch {
+      extra = {};
+    }
+
+    const timeoutMs = getDiscoveryRunnerSettings().timeoutMs;
+    const result = await adapter.checkAvailability(posting.source_job_id, {
+      ...extra,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const checkedAt = new Date().toISOString();
+    const consecutiveFailures = await repository.recordAvailabilityCheck(
+      posting.id,
+      result.status,
+      result.evidence || `Source reported availability as ${result.status}`,
+      checkedAt
+    );
+    return res.json({
+      success: true,
+      status: result.status,
+      evidence: result.evidence || null,
+      checkedAt,
+      consecutiveFailures,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Availability check failed";
     return res.status(500).json({ success: false, error: message });
   }
 });
@@ -854,6 +1120,7 @@ app.post("/api/applications/manual", async (req: Request, res: Response) => {
       job_status: "discovered",
       availability: "unknown",
       availability_evidence: null,
+      availability_check_failures: 0,
       jev_fit: null,
       jev_confidence: null,
       created_at: now,
@@ -1033,12 +1300,13 @@ app.post("/api/jobs/:id/analyze", async (req: Request, res: Response) => {
     return res.json({ success: true, jobId: job.id, analysis });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Analysis failed";
-    return res.status(500).json({ success: false, error: message });
+    return res.status(aiErrorStatus(error)).json({ success: false, error: message });
   }
 });
 
 // Interactive AI Agent (System 2): Cover Letter Drafting
 app.post("/api/jobs/:id/cover-letter", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
   try {
     const { repository } = getRepository();
     const job = await repository.getById(req.params.id);
@@ -1047,10 +1315,134 @@ app.post("/api/jobs/:id/cover-letter", async (req: Request, res: Response) => {
     }
 
     const userNotes = typeof req.body.notes === "string" ? req.body.notes : undefined;
-    const coverLetter = await geminiAgent.generateCoverLetter(job, userNotes);
-    return res.json({ success: true, jobId: job.id, ...coverLetter });
+    if (userNotes && userNotes.length > 2_000) {
+      return res.status(400).json({ success: false, error: "Cover-letter notes must be 2,000 characters or fewer." });
+    }
+    const sourceFacts = await buildApplicationDraftSourceFacts(repository, job);
+    const coverLetter = await geminiAgent.generateCoverLetter(job, userNotes, undefined, sourceFacts);
+    const sourceFactsUsed = sourceFacts.filter((fact) => coverLetter.sourceFactIds.includes(fact.id));
+    const draft = await repository.createApplicationDraft({
+      id: randomUUID(),
+      job_posting_id: job.id,
+      draft_type: "cover_letter",
+      content: coverLetter.coverLetterText,
+      subject_line: coverLetter.suggestedSubjectLine,
+      source_facts: sourceFactsUsed,
+      assumptions: coverLetter.assumptions,
+      author: "assistant",
+      model_id: coverLetter.modelId,
+      prompt_version: coverLetter.promptVersion,
+    });
+    return res.json({ success: true, jobId: job.id, draftId: draft.id, status: draft.status, ...coverLetter });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Cover letter generation failed";
+    return res.status(aiErrorStatus(error)).json({ success: false, error: message });
+  }
+});
+
+app.get("/api/application-drafts", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
+  const query = z.object({
+    jobId: z.string().uuid().optional(),
+    draftType: ApplicationDraftTypeSchema.optional(),
+    status: ApplicationDraftStatusSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+  }).safeParse(req.query);
+  if (!query.success) {
+    return res.status(400).json({ success: false, error: "Invalid application-draft filters." });
+  }
+  try {
+    const drafts = await getRepository().repository.listApplicationDrafts({
+      jobPostingId: query.data.jobId,
+      draftType: query.data.draftType,
+      status: query.data.status,
+      includeSensitive: true,
+      limit: query.data.limit,
+    });
+    return res.json({ success: true, count: drafts.length, drafts });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to list application drafts";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.post("/api/application-drafts", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
+  const parsed = ApplicationDraftCreateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: "Invalid application-draft request." });
+  }
+  try {
+    const repository = getRepository().repository;
+    const job = await repository.getById(parsed.data.job_posting_id);
+    if (!job) return res.status(404).json({ success: false, error: "Job posting not found." });
+    const sensitive = parsed.data.draft_type === "application_answer" && (
+      parsed.data.sensitive === true ||
+      detectSensitiveApplicationQuestion(`Draft application answer: ${parsed.data.question || ""}`) !== null
+    );
+    const draft = await repository.createApplicationDraft({
+      id: randomUUID(),
+      job_posting_id: job.id,
+      draft_type: parsed.data.draft_type,
+      question: parsed.data.question ?? null,
+      sensitive,
+      content: parsed.data.content,
+      subject_line: parsed.data.subject_line ?? null,
+      source_facts: [],
+      assumptions: [],
+      author: "user",
+      model_id: null,
+      prompt_version: null,
+    });
+    return res.status(201).json({ success: true, draft });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to create application draft";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.get("/api/application-drafts/:id", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return res.status(400).json({ success: false, error: "Invalid application draft ID." });
+  try {
+    const draft = await getRepository().repository.getApplicationDraft(id.data);
+    if (!draft) return res.status(404).json({ success: false, error: "Application draft not found." });
+    return res.json({ success: true, draft });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to retrieve application draft";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+app.patch("/api/application-drafts/:id", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return res.status(400).json({ success: false, error: "Invalid application draft ID." });
+  const parsed = ApplicationDraftUpdateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: "Draft text must contain 1 to 20,000 characters." });
+  }
+  try {
+    const draft = await getRepository().repository.updateApplicationDraft(id.data, parsed.data.content);
+    if (!draft) return res.status(404).json({ success: false, error: "Application draft not found." });
+    return res.json({ success: true, draft });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update application draft";
+    return res.status(400).json({ success: false, error: message });
+  }
+});
+
+app.post("/api/application-drafts/:id/approve", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) return res.status(400).json({ success: false, error: "Invalid application draft ID." });
+  try {
+    const draft = await getRepository().repository.approveApplicationDraft(id.data);
+    if (!draft) return res.status(404).json({ success: false, error: "Application draft not found." });
+    return res.json({ success: true, draft });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to approve application draft";
     return res.status(500).json({ success: false, error: message });
   }
 });
@@ -1114,6 +1506,7 @@ app.post("/api/agent/guest-chat", async (req: Request, res: Response) => {
 
 // Create a new conversational session
 app.post("/api/agent/conversations", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
   try {
     const { repository } = getRepository();
     const title = typeof req.body.title === "string" ? req.body.title : undefined;
@@ -1134,6 +1527,7 @@ app.post("/api/agent/conversations", async (req: Request, res: Response) => {
 
 // List conversations (optional filter by referenced jobId)
 app.get("/api/agent/conversations", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
   try {
     const { repository } = getRepository();
     const jobId = typeof req.query.jobId === "string" ? req.query.jobId : undefined;
@@ -1153,6 +1547,7 @@ app.get("/api/agent/conversations", async (req: Request, res: Response) => {
 
 // Retrieve a specific conversation by ID
 app.get("/api/agent/conversations/:id", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
   try {
     const { repository } = getRepository();
     const conv = await repository.getConversation(req.params.id);
@@ -1168,6 +1563,7 @@ app.get("/api/agent/conversations/:id", async (req: Request, res: Response) => {
 
 // Send a message turn to the agent
 app.post("/api/agent/conversations/:id/messages", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
   try {
     const { repository } = getRepository();
     const conv = await repository.getConversation(req.params.id);
@@ -1200,12 +1596,13 @@ app.post("/api/agent/conversations/:id/messages", async (req: Request, res: Resp
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Agent turn failed";
-    return res.status(500).json({ success: false, error: message });
+    return res.status(aiErrorStatus(err)).json({ success: false, error: message });
   }
 });
 
 // Delete a conversation
 app.delete("/api/agent/conversations/:id", async (req: Request, res: Response) => {
+  if (!requireOwner(req, res)) return;
   try {
     const { repository } = getRepository();
     await repository.deleteConversation(req.params.id);
@@ -1438,6 +1835,16 @@ app.get("/api/sources/jobspy/test", async (req: Request, res: Response) => {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const startServer = async () => {
     await initializeRepository();
+    const { repository } = getRepository();
+    const recoveredRuns = await recoverAndResumeDiscoveryRuns({
+      repository,
+      fetchJobs: fetchDiscoverySource,
+      ingestJobs: (jobs) => ingestRawPostings(jobs, { customRepo: repository }),
+    });
+    if (recoveredRuns > 0) {
+      console.log(`[Discovery] Recovered ${recoveredRuns} interrupted source run(s).`);
+    }
+    startScheduledDiscovery();
 
     // If running in development with Vite or production with built static files
     const isProd = process.env.NODE_ENV === "production";
