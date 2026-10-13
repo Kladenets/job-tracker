@@ -11,9 +11,11 @@ import {
   ShieldCheck,
   AlertTriangle,
   RotateCcw,
+  ThumbsDown,
+  ThumbsUp,
 } from "lucide-react";
 import { FitScoreArc } from "./fit-score-arc";
-import { UnifiedJobPosting } from "../../types/job-posting";
+import { RecommendationFeedback, UnifiedJobPosting } from "../../types/job-posting";
 
 interface JobCardProps {
   job: UnifiedJobPosting;
@@ -23,6 +25,15 @@ interface JobCardProps {
   onRestore?: (job: UnifiedJobPosting) => void;
   onAskAI: (job: UnifiedJobPosting) => void;
   onApply: (job: UnifiedJobPosting) => void;
+  feedback: RecommendationFeedback | null;
+  onFeedback: (
+    job: UnifiedJobPosting,
+    vote: "up" | "down",
+    reasonCode?: NonNullable<RecommendationFeedback["reason_code"]>,
+    explanation?: string
+  ) => void;
+  onRetractFeedback: (job: UnifiedJobPosting) => void;
+  isFeedbackPending: boolean;
   isGuest?: boolean;
 }
 
@@ -34,9 +45,17 @@ export function JobCard({
   onRestore,
   onAskAI,
   onApply,
+  feedback,
+  onFeedback,
+  onRetractFeedback,
+  isFeedbackPending,
   isGuest = false,
 }: JobCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [feedbackReason, setFeedbackReason] = useState<
+    NonNullable<RecommendationFeedback["reason_code"]> | ""
+  >("");
+  const [feedbackExplanation, setFeedbackExplanation] = useState("");
 
   const fitScore = job.ai_analysis?.overall_fit_score ?? null;
 
@@ -238,6 +257,24 @@ export function JobCard({
               <ExternalLink className="h-3 w-3" />
             </button>
 
+            {!isGuest && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsExpanded((expanded) => !expanded);
+                }}
+                aria-expanded={isExpanded}
+                aria-controls={`job-details-${job.id}`}
+                title="Open explicit recommendation feedback"
+                aria-label={`Give explicit feedback on ${job.title}`}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+                <span className="hidden @[560px]:inline">Feedback</span>
+              </button>
+            )}
+
             {/* Expand / Collapse Drawer Chevron */}
             <button
               type="button"
@@ -247,7 +284,7 @@ export function JobCard({
               }}
               aria-expanded={isExpanded}
               aria-controls={`job-details-${job.id}`}
-              title={isExpanded ? "Collapse details" : "Expand audit details"}
+              title={isExpanded ? "Collapse details" : "Expand audit details and explicit feedback"}
               aria-label={isExpanded ? "Collapse details" : "Expand audit details"}
               className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-sunken)] cursor-pointer"
             >
@@ -278,6 +315,118 @@ export function JobCard({
       >
         <div className="overflow-hidden">
           <div className="p-4 space-y-4 text-xs">
+            {!isGuest && (
+              <section
+                aria-labelledby={`feedback-heading-${job.id}`}
+                data-testid="recommendation-feedback"
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 space-y-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 id={`feedback-heading-${job.id}`} className="font-bold text-xs text-[var(--text-primary)]">
+                      Explicit recommendation feedback
+                    </h3>
+                    <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                      This vote is separate from saving, dismissing, or applying.
+                    </p>
+                  </div>
+                  {feedback && (
+                    <span className="shrink-0 text-[10px] font-mono-tabular text-[var(--text-secondary)]">
+                      {feedback.vote === "up" ? "Upvoted" : "Downvoted"} · {new Date(feedback.created_at).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 @[600px]:grid-cols-2 gap-2">
+                  <label className="space-y-1">
+                    <span className="block text-[10px] font-semibold text-[var(--text-secondary)]">Reason (optional)</span>
+                    <select
+                      value={feedbackReason}
+                      onChange={(event) => setFeedbackReason(event.target.value as typeof feedbackReason)}
+                      className="w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+                    >
+                      <option value="">No reason</option>
+                      <option value="title">Title</option>
+                      <option value="seniority">Seniority</option>
+                      <option value="skills">Skills</option>
+                      <option value="company">Company</option>
+                      <option value="industry">Industry</option>
+                      <option value="compensation">Compensation</option>
+                      <option value="location">Location</option>
+                      <option value="workplace_type">Workplace type</option>
+                      <option value="responsibilities">Responsibilities</option>
+                      <option value="culture">Culture</option>
+                      <option value="duplicate_irrelevant">Duplicate or irrelevant</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="block text-[10px] font-semibold text-[var(--text-secondary)]">Explanation (optional)</span>
+                    <textarea
+                      value={feedbackExplanation}
+                      onChange={(event) => setFeedbackExplanation(event.target.value)}
+                      maxLength={2_000}
+                      rows={2}
+                      placeholder="What made this recommendation useful or not useful?"
+                      className="w-full resize-y rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2 py-1.5 text-xs text-[var(--text-primary)]"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={feedback?.vote === "up"}
+                    disabled={isFeedbackPending}
+                    onClick={() => onFeedback(
+                      job,
+                      "up",
+                      feedbackReason || undefined,
+                      feedbackExplanation.trim() || undefined
+                    )}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 ${
+                      feedback?.vote === "up"
+                        ? "border-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] text-[var(--status-recommended-fg)]"
+                        : "border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:text-[var(--status-recommended-fg)]"
+                    }`}
+                  >
+                    <ThumbsUp className="h-3.5 w-3.5" />
+                    Upvote
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={feedback?.vote === "down"}
+                    disabled={isFeedbackPending}
+                    onClick={() => onFeedback(
+                      job,
+                      "down",
+                      feedbackReason || undefined,
+                      feedbackExplanation.trim() || undefined
+                    )}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 ${
+                      feedback?.vote === "down"
+                        ? "border-[var(--status-danger-fg)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]"
+                        : "border-[var(--border-subtle)] bg-[var(--surface-base)] text-[var(--text-secondary)] hover:text-[var(--status-danger-fg)]"
+                    }`}
+                  >
+                    <ThumbsDown className="h-3.5 w-3.5" />
+                    Downvote
+                  </button>
+                  {feedback && (
+                    <button
+                      type="button"
+                      disabled={isFeedbackPending}
+                      onClick={() => onRetractFeedback(job)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Retract vote
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
             {/* 1. Deterministic Rule Audit Breakdown */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 font-bold text-xs text-[var(--text-primary)]">

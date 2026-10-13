@@ -537,6 +537,15 @@ export const useAIDockStore = create<AIDockState>((set, get) => ({
 
       const msgData = await msgRes.json();
       const fullReply = msgData.text || "I have analyzed the request.";
+      if (
+        !isGuest &&
+        Array.isArray(msgData.toolCalls) &&
+        msgData.toolCalls.some((tool: { name?: string }) =>
+          tool.name === "draft_cover_letter" || tool.name === "draft_application_answer"
+        )
+      ) {
+        window.dispatchEvent(new Event("application-drafts-updated"));
+      }
 
       // Stream tokens into UI
       let index = 0;

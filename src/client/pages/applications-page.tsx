@@ -5,6 +5,7 @@ import { ApplicationKanban } from "../components/application-kanban";
 import { ApplicationTable } from "../components/application-table";
 import { ApplicationDetailsDrawer } from "../components/application-details-drawer";
 import { AddApplicationModal } from "../components/add-application-modal";
+import { ApplicationDraftsPanel } from "../components/application-drafts-panel";
 import { isApplicationInSegment } from "../components/application-stages";
 import { useAIDockStore } from "../shell/ai-dock-store";
 import { useShellStore } from "../shell/shell-store";
@@ -372,6 +373,8 @@ export function ApplicationsPage() {
             <span>Add Application</span>
           </button>
         </div>
+
+        <ApplicationDraftsPanel jobs={jobsData?.postings ?? []} />
 
         {/* Content View: Loading / Empty / Board / Table */}
         {isAppsLoading ? (

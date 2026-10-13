@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Link as LinkIcon,
@@ -22,6 +22,20 @@ interface DiscoveryRunsPanelProps {
   onDiscoveryRunSuccess?: () => void;
 }
 
+interface StoredDiscoveryRun {
+  id: string;
+  batch_id: string;
+  source: string;
+  trigger_type: "manual" | "scheduled";
+  status: "queued" | "running" | "completed" | "failed";
+  total_found: number;
+  recommended: number;
+  filtered_out: number;
+  error_message: string | null;
+  attempt_count: number;
+  started_at: string;
+}
+
 export function DiscoveryRunsPanel({
   onIngestUrlSuccess,
   onDiscoveryRunSuccess,
@@ -43,6 +57,8 @@ export function DiscoveryRunsPanel({
   // Manual Discovery Run state
   const [selectedSources, setSelectedSources] = useState<string[]>(["greenhouse", "lever"]);
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
+  const [storedRuns, setStoredRuns] = useState<StoredDiscoveryRun[]>([]);
+  const [storedRunsError, setStoredRunsError] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<{
     success: boolean;
     status?: "complete" | "partial" | "failed";
@@ -53,6 +69,24 @@ export function DiscoveryRunsPanel({
     error?: string;
     details?: Array<{ source: string; status: string; error?: string }>;
   } | null>(null);
+
+  const refreshStoredRuns = async () => {
+    try {
+      const response = await fetch("/api/discovery/runs?limit=20");
+      const data = await response.json();
+      if (!response.ok || !data.success || !Array.isArray(data.runs)) {
+        throw new Error(data.error || "Failed to load discovery history");
+      }
+      setStoredRuns(data.runs);
+      setStoredRunsError(null);
+    } catch (error: unknown) {
+      setStoredRunsError(error instanceof Error ? error.message : "Failed to load discovery history");
+    }
+  };
+
+  useEffect(() => {
+    void refreshStoredRuns();
+  }, []);
 
   // Single URL Ingest Handler
   const handleIngestUrl = async (e: React.FormEvent) => {
@@ -159,6 +193,7 @@ export function DiscoveryRunsPanel({
       });
     } finally {
       setIsRunningDiscovery(false);
+      void refreshStoredRuns();
     }
   };
 
@@ -245,6 +280,58 @@ export function DiscoveryRunsPanel({
               <span>Engine: Python CLI</span>
               <span>Run to check availability</span>
             </div>
+          </div>
+
+          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-cyan-500" />
+                RemoteOK
+              </span>
+              <span className="text-[10px] font-medium text-[var(--text-secondary)]">Supported</span>
+            </div>
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Public JSON feed for remote roles with source links, tags, and salary fields when supplied.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-amber-500" />
+                Jobicy
+              </span>
+              <span className="text-[10px] font-medium text-[var(--text-secondary)]">Supported</span>
+            </div>
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Public remote-jobs API with geographic eligibility, posting date, and optional salary ranges.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                <Radio className="h-3.5 w-3.5 text-orange-500" />
+                Hacker News Hiring
+              </span>
+              <span className="text-[10px] font-medium text-[var(--text-secondary)]">Supported</span>
+            </div>
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Recent monthly hiring threads and bounded comment pages, preserving comment and apply links.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-indigo-500" />
+                We Work Remotely
+              </span>
+              <span className="text-[10px] font-medium text-[var(--text-secondary)]">Supported</span>
+            </div>
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Full-stack, front-end, and back-end RSS feeds with ETag and Last-Modified caching.
+            </p>
           </div>
         </div>
       </div>
@@ -392,6 +479,10 @@ export function DiscoveryRunsPanel({
             { id: "greenhouse", label: "Greenhouse ATS" },
             { id: "lever", label: "Lever ATS" },
             { id: "jobspy", label: "JobSpy Scraper (Indeed/LinkedIn)" },
+            { id: "remoteok", label: "RemoteOK" },
+            { id: "jobicy", label: "Jobicy" },
+            { id: "hackernews", label: "Hacker News: Who is Hiring?" },
+            { id: "weworkremotely", label: "We Work Remotely" },
           ].map((src) => (
             <label key={src.id} className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
@@ -478,6 +569,55 @@ export function DiscoveryRunsPanel({
             )}
           </div>
         )}
+
+        <div className="space-y-2 border-t border-[var(--border-subtle)] pt-4">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-[var(--text-primary)]">Recent Source Runs</h4>
+            <button
+              type="button"
+              onClick={() => void refreshStoredRuns()}
+              className="text-[10px] font-medium text-[var(--border-focus)] hover:underline"
+            >
+              Refresh
+            </button>
+          </div>
+          {storedRunsError && (
+            <p role="alert" className="text-[11px] text-[var(--status-danger-fg)]">
+              {storedRunsError}
+            </p>
+          )}
+          {!storedRunsError && storedRuns.length === 0 && (
+            <p className="text-[11px] text-[var(--text-muted)]">No discovery runs have been recorded yet.</p>
+          )}
+          {storedRuns.map((run) => (
+            <div
+              key={run.id}
+              className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2.5 text-[11px]"
+            >
+              <div>
+                <span className="font-semibold text-[var(--text-primary)]">{run.source}</span>
+                <span className="ml-2 text-[var(--text-muted)]">
+                  {run.trigger_type} · {new Date(run.started_at).toLocaleString()}
+                </span>
+                <p className="mt-1 text-[var(--text-secondary)]">
+                  {run.total_found} discovered · {run.filtered_out} filtered · {run.recommended} recommended · {run.attempt_count} attempt{run.attempt_count === 1 ? "" : "s"}
+                </p>
+                {run.error_message && (
+                  <p className="mt-1 text-[var(--status-danger-fg)]">{run.error_message}</p>
+                )}
+              </div>
+              <span className={`rounded px-1.5 py-0.5 font-medium ${
+                run.status === "completed"
+                  ? "bg-[var(--status-recommended-bg)] text-[var(--status-recommended-fg)]"
+                  : run.status === "failed"
+                    ? "bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]"
+                    : "bg-[var(--surface-sunken)] text-[var(--text-secondary)]"
+              }`}>
+                {run.status}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

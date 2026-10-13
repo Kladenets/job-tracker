@@ -45,6 +45,21 @@ interface HealthResponse {
       mode: string;
     };
   };
+  aiUsage: {
+    outboundEnabled: boolean;
+    ownerBudget: {
+      dailyRequestLimit: number;
+      dailyTokenLimit: number;
+      requestsUsed: number;
+      tokensUsed: number;
+      resetsAt: string;
+    };
+    guestUsage: {
+      requests: number;
+      tokens: number;
+      applicationBudget: null;
+    };
+  };
 }
 
 interface DbStatusResponse {
@@ -111,7 +126,7 @@ export function SystemHealthPanel() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Card 1: Database Engine Status */}
         <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
@@ -160,7 +175,9 @@ export function SystemHealthPanel() {
             </span>
             <span className="inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium text-[var(--status-recommended-fg)] bg-[var(--status-recommended-bg)] px-1.5 py-0.5 rounded border border-[var(--status-recommended-fg)]/20">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              {health?.aiProviders.jevScreening.configured ? "Live Scoring" : "Simulated"}
+              {health?.aiUsage.outboundEnabled === false
+                ? "Outbound disabled"
+                : health?.aiProviders.jevScreening.configured ? "Live Scoring" : "Simulated"}
             </span>
           </div>
 
@@ -195,7 +212,7 @@ export function SystemHealthPanel() {
             </span>
             <span className={`inline-flex items-center gap-1 text-[10px] font-mono-tabular font-medium px-1.5 py-0.5 rounded border ${badgeClasses[geminiState.tone]}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${dotClasses[geminiState.tone]}`} />
-              {geminiState.label}
+              {health?.aiUsage.outboundEnabled === false ? "Outbound disabled" : geminiState.label}
             </span>
           </div>
 
@@ -220,6 +237,51 @@ export function SystemHealthPanel() {
 
           <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed pt-2 border-t border-[var(--border-subtle)]">
             Provides conversational deep analysis, automated thread title generation, interview prep, and custom cover letters.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] space-y-3 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+              <Activity className="h-4 w-4 text-[var(--border-focus)]" />
+              AI Usage & Controls
+            </span>
+            <span className={`text-[10px] font-medium ${health?.aiUsage.outboundEnabled ? "text-[var(--status-recommended-fg)]" : "text-[var(--status-danger-fg)]"}`}>
+              {health?.aiUsage.outboundEnabled ? "Outbound enabled" : "Outbound disabled"}
+            </span>
+          </div>
+
+          <div className="space-y-2 text-xs font-mono-tabular">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[var(--text-muted)]">Owner requests:</span>
+              <span className="font-semibold text-[var(--text-primary)]">
+                {health?.aiUsage.ownerBudget.requestsUsed ?? 0} / {health?.aiUsage.ownerBudget.dailyRequestLimit ?? 0}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[var(--text-muted)]">Owner tokens:</span>
+              <span className="font-semibold text-[var(--text-primary)]">
+                {health?.aiUsage.ownerBudget.tokensUsed.toLocaleString() ?? 0} / {health?.aiUsage.ownerBudget.dailyTokenLimit.toLocaleString() ?? 0}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[var(--text-muted)]">Guest requests:</span>
+              <span className="font-semibold text-[var(--text-primary)]">
+                {health?.aiUsage.guestUsage.requests ?? 0} (uncapped)
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[var(--text-muted)]">Budget resets:</span>
+              <span className="text-[var(--text-secondary)]">
+                {health?.aiUsage.ownerBudget.resetsAt
+                  ? new Date(health.aiUsage.ownerBudget.resetsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })
+                  : "Unknown"}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed pt-2 border-t border-[var(--border-subtle)]">
+            Owner budgets are shared across providers. Guest telemetry is separate and does not consume the owner allowance.
           </p>
         </div>
       </div>

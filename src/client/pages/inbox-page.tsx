@@ -9,7 +9,11 @@ import { CardErrorBoundary } from "../components/card-error-boundary";
 import { FilterPopover, FilterCriteria } from "../components/filter-popover";
 import { useAIDockStore } from "../shell/ai-dock-store";
 import { useShellStore } from "../shell/shell-store";
-import { UnifiedJobPosting } from "../../types/job-posting";
+import {
+  createRecommendationFeedbackSnapshot,
+  RecommendationFeedback,
+  UnifiedJobPosting,
+} from "../../types/job-posting";
 import { filterInboxJobs, InboxSegment, InboxSort, sortInboxJobs } from "../inbox-filtering";
 import { CheckCircle2, RotateCcw, AlertCircle, Sparkles } from "lucide-react";
 
@@ -88,7 +92,11 @@ export function InboxPage() {
     isError,
     error,
     refetch,
-  } = useQuery<{ count: number; postings: UnifiedJobPosting[] }>({
+  } = useQuery<{
+    count: number;
+    postings: UnifiedJobPosting[];
+    feedback?: Record<string, RecommendationFeedback>;
+  }>({
     queryKey: ["jobs"],
     queryFn: async () => {
       const res = await fetch("/api/jobs?limit=150");
@@ -224,6 +232,73 @@ export function InboxPage() {
         id: `sync-err-${Date.now()}`,
         type: "info",
         message: "Source crawl completed with warnings or rate limits.",
+      });
+    },
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: async ({
+      job,
+      vote,
+      reasonCode,
+      explanation,
+    }: {
+      job: UnifiedJobPosting;
+      vote: "up" | "down";
+      reasonCode?: NonNullable<RecommendationFeedback["reason_code"]>;
+      explanation?: string;
+    }) => {
+      const response = await fetch(`/api/jobs/${job.id}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vote,
+          reason_code: reasonCode || null,
+          explanation: explanation || null,
+          recommendation_snapshot: createRecommendationFeedbackSnapshot(job),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to save recommendation feedback");
+      return data.feedback as RecommendationFeedback;
+    },
+    onSuccess: (_feedback, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      showToast({
+        id: `feedback-${Date.now()}`,
+        type: "success",
+        message: `Recorded an explicit ${variables.vote === "up" ? "upvote" : "downvote"}.`,
+      });
+    },
+    onError: (error) => {
+      showToast({
+        id: `feedback-error-${Date.now()}`,
+        type: "info",
+        message: error instanceof Error ? error.message : "Failed to save recommendation feedback.",
+      });
+    },
+  });
+
+  const retractFeedbackMutation = useMutation({
+    mutationFn: async (job: UnifiedJobPosting) => {
+      const response = await fetch(`/api/jobs/${job.id}/feedback`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to retract recommendation feedback");
+      return data.feedback as RecommendationFeedback;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      showToast({
+        id: `feedback-retracted-${Date.now()}`,
+        type: "success",
+        message: "Explicit recommendation vote retracted.",
+      });
+    },
+    onError: (error) => {
+      showToast({
+        id: `feedback-retract-error-${Date.now()}`,
+        type: "info",
+        message: error instanceof Error ? error.message : "Failed to retract recommendation feedback.",
       });
     },
   });
@@ -546,6 +621,12 @@ export function InboxPage() {
               <CardErrorBoundary key={job.id} jobId={job.id} fallbackTitle={job.title}>
                 <JobCard
                   job={job}
+                  feedback={jobsData?.feedback?.[job.id] ?? null}
+                  onFeedback={(feedbackJob, vote, reasonCode, explanation) =>
+                    feedbackMutation.mutate({ job: feedbackJob, vote, reasonCode, explanation })
+                  }
+                  onRetractFeedback={(feedbackJob) => retractFeedbackMutation.mutate(feedbackJob)}
+                  isFeedbackPending={feedbackMutation.isPending || retractFeedbackMutation.isPending}
                   isFocused={index === focusedIndex}
                   onSave={handleSave}
                   onDismiss={handleDismiss}
