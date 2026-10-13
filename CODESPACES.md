@@ -6,6 +6,10 @@ Create a Codespace from this repository. The devcontainer installs Node.js 24.19
 
 Container creation installs dependencies only: it does not start the app, seed data, or run job discovery. Scheduled discovery is disabled by default in the devcontainer.
 
+## Containers and database
+
+Codespaces Compose runs the `workspace` and ephemeral `db` services. `npm run dev` runs inside `workspace` and connects to PostgreSQL at hostname `db`; direct queries from the workspace use `DATABASE_URL`. Docker-in-Docker is a separate daemon used by the opt-in container tests. `docker ps` and the Containers extension show containers launched in that daemon, not the Codespaces-managed `workspace` or `db` services.
+
 ## Start and seed
 
 Run the app interactively in a terminal:
