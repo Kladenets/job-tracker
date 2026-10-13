@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>We Work Remotely - Sanitized Fixture</title>
+    <item>
+      <title>Example WWR Company: Senior Full Stack Engineer</title>
+      <link>https://weworkremotely.com/remote-jobs/sanitized-full-stack-engineer</link>
+      <guid isPermaLink="false">wwr-sanitized-001</guid>
+      <pubDate>Fri, 02 Oct 2026 10:00:00 GMT</pubDate>
+      <category>Full-Stack Programming</category>
+      <description><![CDATA[<p>Location: United States</p><p>Build secure, reliable services with TypeScript.</p>]]></description>
+    </item>
+  </channel>
+</rss>

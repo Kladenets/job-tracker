@@ -1,0 +1,17 @@
+{
+  "hits": [
+    {
+      "objectID": "789012",
+      "parent_id": 123456,
+      "created_at": "2026-10-02T12:00:00.000Z",
+      "comment_text": "<p>Example Systems | Senior Backend Engineer | Remote US | Full-time</p><p>Build reliable services with Go and PostgreSQL.</p><p><a href=\"https://example.test/careers/backend\">Apply here</a></p>"
+    },
+    {
+      "objectID": "789013",
+      "parent_id": 123456,
+      "created_at": "2026-10-02T13:00:00.000Z",
+      "comment_text": "<p>Example Studio | Frontend Engineer | New York, NY</p><p>Build accessible web applications.</p>"
+    }
+  ],
+  "nbPages": 1
+}

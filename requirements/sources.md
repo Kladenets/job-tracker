@@ -2,6 +2,8 @@
 
 This document defines the sources portfolio for Job Tracker, their access technologies, operational parameters, and error/rate management requirements.
 
+The MVP source set includes every source listed in this document: Greenhouse, Lever, JobSpy, RemoteOK, Jobicy, Hacker News "Who is Hiring?", and We Work Remotely. Source selection is per run; one source's throttling or failure must not stop another adapter.
+
 ---
 
 ## 1. Overview & Strategy
@@ -62,6 +64,7 @@ Aggregates postings directly from major job platforms using public search interf
 - **Failure Modes & Resilience:**
   - Per-board failure isolation: if LinkedIn rate-limits or changes a DOM structure, Indeed/ZipRecruiter results must still succeed and be captured.
   - Returns raw structured records with status, execution duration, and error diagnostics per target board.
+  - The production image must be able to launch the bridge using its bundled Python runtime, CLI script, and dependencies. `npm run test:docker` verifies the image and confirms an execution failure is returned as a structured unsuccessful result without issuing a live source request.
 
 ---
 
@@ -73,18 +76,21 @@ Direct, highly structured HTTP JSON endpoints that require zero authentication c
 - **Focus:** Remote software engineering, frontend, full-stack, distributed systems.
 - **Data Attributes:** Tags/skills, explicit salary ranges (min/max when present), location/region restrictions (e.g., US Only, Worldwide), full HTML description, apply URL.
 - **Operational Cadence:** Every 6–12 hours or on manual trigger. Respects HTTP caching / conditional headers.
+- **Adapter:** Registered as `remoteok`; consumes the public JSON feed and preserves source and direct apply URLs. Absence from the current feed is inconclusive for availability, not proof of closure.
 
 #### B. Jobicy API
 - **Endpoint:** `https://jobicy.com/api/v2/remote-jobs?count=50&industry=tech`
 - **Focus:** US-eligible remote tech postings.
 - **Data Attributes:** Title, company, job type, geographic eligibility, description HTML, pubDate.
 - **Operational Cadence:** Periodic batch query (daily / on-demand).
+- **Adapter:** Registered as `jobicy`; validates the `jobs` response, retains only explicit salary currency/ranges, and cleans description HTML before normalization.
 
 #### C. Hacker News "Who is Hiring?" (Algolia / Firebase API)
 - **Endpoint:** Algolia Search API (`https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring`)
 - **Focus:** Monthly engineering threads (posted on the 1st of every month). Direct engineering leadership/founder posts without recruiter middlemen.
 - **Data Attributes:** Raw text/markdown, direct email or custom apply links, tech stack details, explicit remote and location tags.
 - **Operational Cadence:** High volume ingestion on the 1st–3rd of each month; infrequent polling thereafter.
+- **Adapter:** Registered as `hackernews`; discovers recent hiring threads, fetches a bounded number of comment pages, preserves the HN comment URL and any explicit external apply link, and checks item state through Firebase.
 
 ---
 
@@ -99,6 +105,13 @@ Curated, category-specific syndication feeds.
 - **Focus:** High signal-to-noise curated tech positions.
 - **Data Attributes:** Job title, company, publication date, GUID/link, category, HTML description.
 - **Operational Cadence:** Hourly to daily polling. Utilizes `If-Modified-Since` and `ETag` headers to minimize redundant bandwidth.
+- **Adapter:** Registered as `weworkremotely`; consumes all three listed RSS categories and reuses cached bodies on HTTP 304. A page load without an explicit closed marker remains `unknown`.
+
+### Common HTTP and failure handling
+
+- Each public adapter validates its top-level response shape and maps source fields into `RawJobPosting`; sanitized contract fixtures are stored under `src/adapters/__tests__/fixtures`.
+- The shared source HTTP client retries bounded transient errors and HTTP 429/503 responses, honors a bounded `Retry-After`, sends conditional cache headers when validators are available, and propagates cancellation/timeouts.
+- Discovery remains isolated per source: exhausted retries produce a failed source record while successful sources in the same batch are still ingested. Live source calls are not part of the default test suite.
 
 ---
 

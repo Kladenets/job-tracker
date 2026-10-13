@@ -1,0 +1,19 @@
+[
+  {
+    "legal": "Sanitized RemoteOK fixture"
+  },
+  {
+    "id": "remoteok-123",
+    "slug": "sanitized-platform-engineer",
+    "position": "Platform Engineer",
+    "company": "Example Remote Company",
+    "location": "US Only",
+    "date": "2026-10-01T12:00:00Z",
+    "salary_min": 140000,
+    "salary_max": 170000,
+    "url": "https://remoteok.com/remote-jobs/sanitized-platform-engineer",
+    "apply_url": "https://example.test/careers/platform-engineer",
+    "description": "<p>Build reliable TypeScript systems.</p>",
+    "tags": ["typescript", "platform"]
+  }
+]

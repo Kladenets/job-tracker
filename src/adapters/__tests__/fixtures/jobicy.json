@@ -1,0 +1,18 @@
+{
+  "jobs": [
+    {
+      "id": "jobicy-456",
+      "url": "https://jobicy.com/jobs/sanitized-product-engineer",
+      "jobTitle": "Product Engineer",
+      "companyName": "Example Jobicy Company",
+      "jobGeo": "United States",
+      "jobType": ["full-time"],
+      "jobDescription": "<p>Build thoughtful software with <strong>React</strong>.</p>",
+      "pubDate": "2026-10-02T09:30:00Z",
+      "annualSalaryMin": "125000",
+      "annualSalaryMax": "155000",
+      "salaryCurrency": "USD",
+      "companyUrl": "https://example.test"
+    }
+  ]
+}
