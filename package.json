@@ -17,6 +17,7 @@
     "lint:client": "tsc --project tsconfig.client.json --noEmit",
     "lint": "npm run lint:server && npm run lint:client",
     "agent:chat": "tsx src/scripts/chat.ts",
+    "dev:seed": "tsx scripts/codespaces-seed.ts",
     "test": "tsx src/normalizers/__tests__/job-translator.test.ts && tsx src/pipeline/__tests__/deduplication-and-state.test.ts && tsx src/pipeline/__tests__/discovery-runner.test.ts && tsx src/ai/agent/__tests__/agent.test.ts && tsx src/ai/__tests__/usage-accounting.test.ts && tsx src/ai/__tests__/application-drafts.test.ts && tsx src/middleware/__tests__/auth.test.ts && tsx src/pipeline/__tests__/applications-and-metrics.test.ts && tsx src/db/__tests__/migrator.test.ts && tsx src/db/__tests__/feedback-repository.test.ts && tsx src/pipeline/__tests__/api-endpoints.test.ts && tsx src/adapters/__tests__/source-adapters.test.ts && tsx src/client/theme/__tests__/theme-and-tokens.test.ts && tsx src/client/shell/__tests__/shell-and-router.test.ts && tsx src/client/shell/__tests__/ai-dock.test.ts && tsx src/client/pages/__tests__/inbox-page.test.ts && tsx src/client/pages/__tests__/applications-page.test.ts && tsx src/client/pages/__tests__/dashboard-page.test.ts && tsx src/client/pages/__tests__/setup-page.test.ts",
     "test:postgres": "tsx src/db/__tests__/postgres.integration.test.ts",
     "test:docker": "node scripts/docker-smoke.mjs",
