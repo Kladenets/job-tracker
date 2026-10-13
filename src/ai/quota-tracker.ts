@@ -138,6 +138,7 @@ class QuotaTracker {
    */
   public markExhausted(tier: KeyTier, resetHeaderValue?: string): void {
     const record = this.telemetry[tier];
+    record.configured = true;
     record.isExhausted = true;
     record.lastUsedAt = new Date().toISOString();
 
@@ -162,6 +163,7 @@ class QuotaTracker {
    */
   public recordResponseHeaders(tier: KeyTier, headers: Record<string, string | string[] | undefined> | undefined): void {
     const record = this.telemetry[tier];
+    record.configured = true;
     record.lastUsedAt = new Date().toISOString();
 
     if (!headers) return;

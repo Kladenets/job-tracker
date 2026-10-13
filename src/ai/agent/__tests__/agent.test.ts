@@ -136,7 +136,7 @@ async function runAgentSuite() {
 
   // Seed sample job into repository
   const sampleJob: UnifiedJobPosting = {
-    id: "job-test-777",
+    id: "77777777-7777-4777-8777-777777777777",
     source: "lever",
     source_job_id: "lever-777",
     source_url: "https://jobs.lever.co/test/777",
@@ -182,6 +182,19 @@ async function runAgentSuite() {
   };
 
   await repository.savePosting(sampleJob);
+  await repository.saveUserProfile("candidate_profile", {
+    fullName: "API Test Candidate",
+    skills: ["TypeScript", "PostgreSQL"],
+    yearsExperience: 4,
+    additionalExperience: "",
+  });
+  await repository.saveUserProfile("candidate_resume", {
+    basics: { name: "API Test Candidate" },
+    work: [],
+    projects: [],
+    education: [],
+    skills: [],
+  });
   console.log("✓ Test job seeded into repository");
 
   // 1. Test Conversation Model & Dynamic Job Tagging
@@ -194,16 +207,16 @@ async function runAgentSuite() {
   assert(conv.title === "Can you help me prepare for Acme Corp?", "First user message should update conversation title");
   assert(conv.getMessages().length === 1, "Should have 1 message");
 
-  conv.tagJobId("job-test-777");
-  conv.tagJobId("job-test-777"); // Duplicate tag should be ignored
-  assert(conv.job_ids.length === 1 && conv.job_ids[0] === "job-test-777", "tagJobId should deduplicate tags");
+  conv.tagJobId("77777777-7777-4777-8777-777777777777");
+  conv.tagJobId("77777777-7777-4777-8777-777777777777"); // Duplicate tag should be ignored
+  assert(conv.job_ids.length === 1 && conv.job_ids[0] === "77777777-7777-4777-8777-777777777777", "tagJobId should deduplicate tags");
 
   // Serialization roundtrip
   const json = conv.toJSON();
   const rehydrated = Conversation.fromJSON(json);
   assert(rehydrated.id === conv.id, "Rehydrated ID should match");
   assert(rehydrated.title === conv.title, "Rehydrated title should match");
-  assert(rehydrated.job_ids[0] === "job-test-777", "Rehydrated job_ids should match");
+  assert(rehydrated.job_ids[0] === "77777777-7777-4777-8777-777777777777", "Rehydrated job_ids should match");
   assert(rehydrated.getMessages().length === 1, "Rehydrated messages length should match");
   console.log("✓ Conversation model, message ordering, and job tagging verified");
 
@@ -229,19 +242,23 @@ async function runAgentSuite() {
     repository,
     profile,
     conversation: conv,
+    role: "owner",
+    model_id: "offline-template",
+    prompt_version: "application-draft-v1",
+    execution_mode: "offline",
   };
 
   // Tool A: GetJobDetailsTool
   const detailsTool = new GetJobDetailsTool();
-  const detailsRaw = await detailsTool.execute({ job_id: "job-test-777" }, context);
+  const detailsRaw = await detailsTool.execute({ job_id: "77777777-7777-4777-8777-777777777777" }, context);
   const details = JSON.parse(detailsRaw);
-  assert(details.id === "job-test-777", "get_job_details should return the correct job");
+  assert(details.id === "77777777-7777-4777-8777-777777777777", "get_job_details should return the correct job");
   assert(details.company === "Acme Corp", "get_job_details should return company");
   console.log("✓ GetJobDetailsTool successfully executed");
 
   // Tool B: AnalyzeQualificationFitTool
   const fitTool = new AnalyzeQualificationFitTool();
-  const fitRaw = await fitTool.execute({ job_id: "job-test-777" }, context);
+  const fitRaw = await fitTool.execute({ job_id: "77777777-7777-4777-8777-777777777777" }, context);
   const fit = JSON.parse(fitRaw);
   assert(fit.overallFitScore > 0, "analyze_qualification_fit should return positive score");
   assert(fit.matchedQualifications.length > 0, "analyze_qualification_fit should match candidate skills");
@@ -249,15 +266,18 @@ async function runAgentSuite() {
 
   // Tool C: DraftCoverLetterTool
   const letterTool = new DraftCoverLetterTool();
-  const letterRaw = await letterTool.execute({ job_id: "job-test-777", notes: "Focus on cloud architecture" }, context);
+  const letterRaw = await letterTool.execute({ job_id: "77777777-7777-4777-8777-777777777777", notes: "Focus on cloud architecture" }, context);
   const letter = JSON.parse(letterRaw);
-  assert(letter.suggestedSubjectLine.includes("Acme Corp"), "Cover letter subject line should mention company");
-  assert(letter.coverLetterText.includes("Focus on cloud architecture"), "Cover letter should incorporate user notes");
-  console.log("✓ DraftCoverLetterTool successfully incorporated user notes");
+  assert(letter.subject_line.includes("Acme Corp"), "Cover letter subject line should mention company");
+  assert(letter.content.includes("TypeScript"), "Cover letter should use sourced candidate skills");
+  assert(!letter.content.includes("scalable systems"), "Cover letter must not invent unsupported experience");
+  assert(letter.status === "draft", "Generated cover letters must remain unapproved drafts");
+  assert(letter.assumptions.includes("User-provided emphasis to review: Focus on cloud architecture"));
+  console.log("✓ DraftCoverLetterTool saved a fact-grounded, unapproved draft with provenance");
 
   // Tool D: GenerateInterviewPrepTool
   const prepTool = new GenerateInterviewPrepTool();
-  const prepRaw = await prepTool.execute({ job_id: "job-test-777" }, context);
+  const prepRaw = await prepTool.execute({ job_id: "77777777-7777-4777-8777-777777777777" }, context);
   const prep = JSON.parse(prepRaw);
   assert(prep.questions.technical.length > 0, "Interview prep should generate technical questions");
   assert(prep.company === "Acme Corp", "Interview prep should associate with company");
@@ -299,9 +319,9 @@ async function runAgentSuite() {
   const loadedConv = await repository.getConversation(conv.id);
   assert(loadedConv !== null, "Repository should retrieve saved conversation");
   assert(loadedConv?.id === conv.id, "Retrieved ID should match");
-  assert(loadedConv?.job_ids.includes("job-test-777") === true, "Retrieved conversation should retain tagged job_ids");
+  assert(loadedConv?.job_ids.includes("77777777-7777-4777-8777-777777777777") === true, "Retrieved conversation should retain tagged job_ids");
 
-  const jobConvList = await repository.listConversations({ jobId: "job-test-777" });
+  const jobConvList = await repository.listConversations({ jobId: "77777777-7777-4777-8777-777777777777" });
   assert(jobConvList.length === 1, "listConversations({ jobId }) should return tagged conversation");
   console.log("✓ Conversation repository persistence and job_ids filtering verified");
 

@@ -9,6 +9,10 @@ export interface ToolContext {
   repository: JobPostingRepository;
   profile: SearchProfile;
   conversation: Conversation;
+  role: "owner" | "guest";
+  model_id: string;
+  prompt_version: string;
+  execution_mode: "model" | "offline";
 }
 
 /**

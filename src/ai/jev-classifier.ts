@@ -1,6 +1,8 @@
 import { UnifiedJobPosting } from "../types/job-posting.js";
 import { SearchProfile, getSearchProfile } from "../config/search-profile.js";
 import { getRepository } from "../db/index.js";
+import { beginTrackedAiRequest, isOutboundAiEnabled } from "./usage-accounting.js";
+import { AiUsagePersistenceError } from "./usage-types.js";
 
 export interface JevFitDecision {
   fit: boolean;
@@ -96,7 +98,7 @@ export class TypeSafeJevClassifier implements FitClassifier {
       endpoint = endpoint.replace(/\/noul$/, "/systemone");
     }
 
-    if (!apiKey) {
+    if (!apiKey || !isOutboundAiEnabled()) {
       return this.fallback.classify(posting, activeProfile);
     }
 
@@ -104,7 +106,26 @@ export class TypeSafeJevClassifier implements FitClassifier {
     const payload = buildJevInputPayload(posting, activeProfile);
     const model = activeProfile.jevScreening.model === "jev-system-1" ? "jev-latest" : (activeProfile.jevScreening.model || "jev-latest");
 
+    const requestBody = JSON.stringify({
+      model,
+      state: payload,
+      questions: {
+        is_job_fit: {
+          type: "noul",
+          instructions: "Is this job posting a strong qualification and career fit for this candidate based on their skills, target roles, and location preferences?",
+        },
+      },
+    });
+    let usage: Awaited<ReturnType<typeof beginTrackedAiRequest>> | undefined;
+    let usageFinalized = false;
     try {
+      usage = await beginTrackedAiRequest({
+        role: "owner",
+        provider: "typesafe",
+        model,
+        promptVersion: "jev-fit-v1",
+        input: requestBody,
+      });
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -125,11 +146,15 @@ export class TypeSafeJevClassifier implements FitClassifier {
 
       if (!response.ok) {
         const errText = await response.text();
+        usageFinalized = true;
+        await usage.fail(new Error(`TypeSafe AI returned HTTP ${response.status}`));
         console.warn(`[TypeSafe JEV] API returned ${response.status}: ${errText}, falling back to simulator`);
         return this.fallback.classify(posting, activeProfile);
       }
 
       const data: any = await response.json();
+      usageFinalized = true;
+      await usage.complete(data);
       const latencyMs = Date.now() - startTime;
       const noulProbability = Number(data.answers?.is_job_fit?.noul ?? 0.5);
       const threshold = activeProfile.jevScreening.minConfidenceRecommend || 0.70;
@@ -145,6 +170,11 @@ export class TypeSafeJevClassifier implements FitClassifier {
         latencyMs,
       };
     } catch (err) {
+      if (err instanceof AiUsagePersistenceError) throw err;
+      if (usage && !usageFinalized) {
+        usageFinalized = true;
+        await usage.fail(err);
+      }
       console.warn("[TypeSafe JEV] Network error, falling back to simulator:", err);
       return this.fallback.classify(posting, activeProfile);
     }
