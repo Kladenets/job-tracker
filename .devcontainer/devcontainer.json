@@ -1,0 +1,28 @@
+{
+  "name": "Job Tracker Codespaces",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "runServices": ["workspace", "db"],
+  "workspaceFolder": "/workspaces/job-tracker",
+  "shutdownAction": "stopCompose",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "24.19.0",
+      "npmVersion": "12.2.0"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true,
+      "dockerDashComposeVersion": "latest",
+      "installDockerBuildx": true
+    }
+  },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Job Tracker development server",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "sudo chown -R \"$(id -u):$(id -g)\" node_modules .venv && npm install --global npm@12.2.0 && npm ci && python3 -m venv .venv && .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt"
+}

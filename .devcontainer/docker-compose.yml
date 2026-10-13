@@ -1,0 +1,42 @@
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    working_dir: /workspaces/job-tracker
+    volumes:
+      - ..:/workspaces/job-tracker:cached
+      - node_modules:/workspaces/job-tracker/node_modules
+      - python_venv:/workspaces/job-tracker/.venv
+    command: sleep infinity
+    init: true
+    privileged: true
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://postgres@db:5432/job_tracker_dev
+      DATABASE_SSL: "false"
+      PYTHON_PATH: /workspaces/job-tracker/.venv/bin/python
+      DISCOVERY_INTERVAL_HOURS: "0"
+      JOB_TRACKER_DEV_SEED_ALLOWED: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: job_tracker_dev
+      POSTGRES_USER: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  node_modules:
+  python_venv:
