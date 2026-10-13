@@ -39,7 +39,7 @@ PostgreSQL access uses `pg` and versioned SQL migrations. The current MVP runs o
 
 Long-running crawling, availability checking, and AI analysis must be durable, idempotent, retryable, and independently observable. Restarting the application must not lose queued work or permanently strand work that was in progress.
 
-Retries must be bounded. Work that exhausts its retries must enter a visible failed state that the user can inspect and retry. The implementation must recover abandoned in-progress work after an interrupted process without running it concurrently twice.
+Discovery source work is recorded before execution and recovered from the durable run queue after restart. Retries and source concurrency are bounded. Work that exhausts its retries must enter a visible failed state that the user can inspect and retry. Atomic PostgreSQL claims prevent the same queued source task from running concurrently twice.
 
 ## Configuration
 
@@ -64,12 +64,12 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 
 ## AI usage controls
 
-- Configure daily request and token budgets per owner provider/model. Guest chat uses an isolated provider key and has no application-level request/token cap in the MVP; provider-side quota remains the limit.
-- Estimate input size before calls and reject or truncate according to an explicit policy.
-- Record actual usage when available.
+- Configure combined daily owner request/token budgets across outbound AI providers with `AI_OWNER_DAILY_REQUEST_BUDGET` and `AI_OWNER_DAILY_TOKEN_BUDGET` (UTC reset). Reserve estimated input tokens before each provider request; reject requests that exceed the remaining budget and report the reset time.
+- Guest chat uses an isolated provider key and has no application-level request/token cap in the MVP; provider-side quota remains the limit. Guest usage may be recorded for aggregate diagnostics without affecting owner budgets.
+- Persist provider, model, prompt version, request role, input estimate, available input/output/total tokens, latency, completion status, and a non-sensitive error code. Do not persist prompts or responses as usage records.
+- Set `AI_OUTBOUND_ENABLED=false` to disable every outbound AI provider call while retaining local fallback behavior. Owner diagnostics report the switch and daily usage without making provider requests.
 - Avoid duplicate calls using the posting content hash, relevant profile state or hash, prompt/schema version, provider, and model.
 - Use bounded concurrency and retries; do not retry permanent validation or authentication failures.
-- Provide a kill switch that disables all outbound AI calls.
 
 ## Security
 
@@ -87,7 +87,7 @@ Retries must be bounded. Work that exhausts its retries must enter a visible fai
 - Unit tests: normalization, rules, scoring, transitions, schemas, and permissions.
 - Contract tests: each source adapter against sanitized fixtures.
 - API tests: Run against an isolated temporary file-backed repository and do not require a PostgreSQL service.
-- PostgreSQL integration tests: When run, use a real disposable PostgreSQL database and a separate opt-in command; never use a developer's shared database.
+- PostgreSQL integration tests: Run separately with `npm run test:postgres`. The command starts its own disposable PostgreSQL 16 container on a loopback ephemeral port, covers migrations, fail-closed production startup, repository parity, transactional rollback, and data visible to a fresh process, then removes the container. It does not read `DATABASE_URL`; Docker is required. Keep these tests out of the default `npm test` suite.
 - AI evaluation tests: stored inputs and schema/evidence assertions; avoid requiring live calls in the default test suite.
 - UI tests: primary import, review, feedback, and application workflows.
 
@@ -100,7 +100,7 @@ Document commands for:
 - install and configure;
 - migrate the database;
 - start web and worker processes;
-- trigger discovery and availability checks;
+- trigger discovery and availability checks (`DISCOVERY_INTERVAL_HOURS`, default `24`; `0` disables the scheduler; `DISCOVERY_CONCURRENCY`, `DISCOVERY_MAX_ATTEMPTS`, and `DISCOVERY_SOURCE_TIMEOUT_MS` bound work);
 - run checks and tests;
 - back up and export data;
 - inspect failed jobs;

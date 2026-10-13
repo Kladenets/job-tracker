@@ -56,6 +56,12 @@
   - The UI renders an elegant informational card:
     - *"Application Pipeline & Kanban Tracker: Restricted to authenticated candidate workspace to preserve personal applicant privacy. Explore the public job directory and test the interactive AI agent in Explore Jobs."*
 
+### 1.7 Application Draft Review
+- The owner Applications page lists saved cover-letter and application-answer drafts with their current text, cited candidate facts, assumptions, model/prompt version, and approval state.
+- The owner may write an application answer directly (including sensitive questions), edit any draft, inspect version history, and explicitly approve the current version.
+- Editing appends a user-authored version and returns the draft to unapproved state. Sensitive user-authored answers are labeled user-only and are never included in AI prior-answer retrieval.
+- Guest sessions cannot view or edit application drafts.
+
 ## 2. Non-Functional Requirements
 
 - **Persistence Parity:** Must work identically whether running on PostgreSQL or local file-backed repository.

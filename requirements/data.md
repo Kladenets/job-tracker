@@ -76,11 +76,19 @@ The posting retains versioned AI intelligence data across two tiers:
 2. **Interactive Agent Data (System-2 On-Demand Assistance):**
    - detailed qualification match and gap breakdown;
    - resume focus suggestions;
-   - generated cover letter drafts and revisions;
+   - generated cover letters and application-question answers as persisted, unapproved drafts;
    - interview and technical preparation notes;
    - model ID, prompt version, and token usage metadata.
 
 The MVP retains the latest automated JEV evaluation and any user-initiated agent artifacts.
+
+Application drafts persist in `application_drafts` with ordered `application_draft_versions`. Each version stores text, source-fact snapshots, assumptions, author, model/prompt metadata, timestamps, and explicit approval metadata. User edits append a new version and make it unapproved without deleting earlier generated or approved versions. Sensitive user-authored answers are marked and excluded from approved-answer retrieval.
+
+#### AI request usage
+
+Persist one `ai_usage` record for every attempted outbound Gemini or TypeSafe request, including failed provider calls. Each record includes owner/guest role, provider, model ID, prompt version, start/completion timestamps, estimated input tokens, available actual input/output/total token counts, latency, outcome, and a non-sensitive error code. Do not store prompt or response content in usage records.
+
+Owner request and token budgets reserve estimated input tokens before each provider request and count pending reservations, so concurrent calls cannot bypass configured limits. Guest records remain isolated from the owner budget and have no application-level cap in the MVP. Usage and reservations persist across restarts in both file and PostgreSQL repositories.
 
 #### Deduplication
 
@@ -116,6 +124,7 @@ Posting availability represents the source's apparent state:
 - `closed`.
 
 It must remain separate from job status. A saved or applied job may later have a closed posting.
+Store the latest evidence and check timestamp, plus the consecutive inconclusive-check count. Explicit source status can set `open` or `closed`; transient/inconclusive evidence remains `unknown` and never closes a posting by itself.
 
 ### Application
 
@@ -153,9 +162,9 @@ Application questions, draft answers, contacts, interview notes, and document re
 
 ### Recommendation feedback
 
-The MVP must support an explicit upvote or downvote on a job, with an optional reason and timestamp. Feedback may be retracted or replaced without erasing its history. The feedback must retain the recommendation value, score, model, and analyzer version shown when the vote was made.
+The MVP must support an explicit upvote or downvote on a job, with an optional reason code, explanation, timestamp, and versioned snapshot of the recommendation, JEV/analysis scores, provider, model, and prompt version shown when the vote was made. At most one vote is active per job. Retraction records its timestamp and reason; replacement additionally links the old event to the new event without erasing either. File and PostgreSQL repositories persist and return the same chronological feedback history.
 
-Saving, dismissing, and applying are workflow events, not implicit votes. Future learning may use them as behavioral signals, but they must remain distinguishable from explicit preference feedback.
+Saving, dismissing, and applying are workflow events, not implicit votes. Silence is not a vote. Future learning may use workflow events as behavioral signals, but they must remain distinguishable from explicit preference feedback.
 
 ### Agent conversation and message history
 
@@ -211,7 +220,7 @@ Expected search profile configuration:
     - `tolerance_percentage`: percentage below target before hard exclusion (e.g., 10%–15% tolerance window).
     - `missing_salary_policy`: `allow` (retained as null, never excluded).
   - `posting_age`:
-    - `max_age_days`: maximum allowable posting age (e.g., 45 or 60 days).
+    - `max_age_days`: integer maximum allowable posting age, from 1–365 days (default 45). Exclude only known dates strictly older than this limit; preserve missing/invalid dates as unknown.
   - `seniority`:
     - `preferred_levels`: `["mid", "senior", "lead", "unknown"]`.
     - `excluded_levels`: `["intern", "student", "director", "executive"]`.
@@ -229,10 +238,12 @@ Expected search profile configuration:
 
 Each discovery run must retain:
 
-- source and trigger;
+- batch identity, source and trigger;
 - start, completion, and status;
-- discovered, created, filtered, and queued-for-analysis counts;
-- error count and a concise error summary.
+- attempt count; discovered, created, duplicate, filtered, JEV-screened, and recommended counts;
+- error count and a concise last-error/recovery summary.
+
+Each batch contains one durable source-level run item per adapter. Queued and interrupted items are resumed after restart within a bounded retry budget; exhausted items remain failed and inspectable. File and PostgreSQL repositories expose the same run-history and recovery behavior.
 
 ### Background work
 
@@ -258,7 +269,7 @@ If crawling and analysis run asynchronously, queued work must survive applicatio
   - queued-work scheduling and status.
 - Provide documented backup, restore, and machine-readable export procedures.
 - Default API tests use a fresh temporary file-backed repository and do not require PostgreSQL. They must not mutate developer profile/config files or a shared data store.
-- PostgreSQL migration/repository integration tests are a separate opt-in suite and must use an isolated disposable PostgreSQL database, never a shared development database.
+- PostgreSQL migration/repository integration tests are a separate opt-in suite: `npm run test:postgres` creates and removes its own disposable PostgreSQL 16 container and never reads `DATABASE_URL` or a developer's shared database. It covers real migrations and rollback, repository parity, production fail-closed startup, and persistence observed by a fresh process. Default tests remain isolated from PostgreSQL and require no Docker service.
 
 ## Retention and deletion
 

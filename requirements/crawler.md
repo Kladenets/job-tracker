@@ -9,8 +9,8 @@ Acquire postings from supported sources, preserve source evidence, normalize the
 The MVP must support:
 
 1. Manual URL import.
-2. At least one source-specific adapter selected during implementation.
-3. A common adapter contract so additional ATS or employer-site adapters do not alter downstream code.
+2. Source-specific adapters for Greenhouse, Lever, JobSpy, RemoteOK, Jobicy, Hacker News "Who is Hiring?", and We Work Remotely.
+3. A common adapter contract so adding or failing one source does not alter downstream normalization, filtering, or persistence.
 
 A source adapter must expose:
 
@@ -23,13 +23,17 @@ A source adapter must expose:
 
 The crawler must respect applicable source terms, robots directives, and reasonable request rates. It must not bypass authentication, bot controls, or CAPTCHAs.
 
+The production container must include the Python runtime, `scripts/jobspy_cli.py`, and the pinned project Python dependencies required by the JobSpy bridge. Its opt-in Docker smoke test must verify the public health endpoint, persistence across app-container recreation, and a structured JobSpy failure without making live source requests.
+
 ## Functional requirements
 
 ### Discovery and retrieval
 
 - Support manual and scheduled runs.
-- Record the start, end, trigger, adapter, counts, and errors for each run.
-- Apply per-domain concurrency limits, timeouts, retries, exponential backoff, and jitter.
+- Persist one source-level run record in `discovery_runs` for every selected adapter, grouped by batch ID. Record its trigger, start/completion timestamps, status, attempt count, fetched/new/duplicate/filtered/screened/recommended counts, and concise last error.
+- `POST /api/discovery/run` executes a manual batch; the daily scheduler uses the same runner and records `trigger_type = 'scheduled'`. `GET /api/discovery/runs` exposes recent and failed source runs to owners.
+- Apply bounded source concurrency, abortable timeouts, a configurable maximum attempt count, exponential backoff, and jitter. A source failure must not prevent other sources from completing.
+- Queue source work durably before execution. On startup, re-queue abandoned in-progress records within the retry budget and resume queued work; mark exhausted work failed and visible for a later manual retry. Repeated ingestion is safe through source-ID/canonical-URL deduplication.
 - Identify itself through a configurable user agent where appropriate.
 - Cache recent successful responses and avoid unnecessary refetches.
 - Distinguish transient retrieval errors from permanent extraction failures.
@@ -112,6 +116,8 @@ Availability checks should use this order:
 
 Store `open`, `closed`, or `unknown`, the evidence, check time, and consecutive failure count. An inconclusive finding maps to `unknown`; it is not a fourth availability state. A transient error must not close a posting. By default, mark closed only on explicit source evidence or repeated conclusive checks.
 
+Owner `POST /api/jobs/:id/check-availability` uses the registered source adapter and persists its status/evidence. Explicit source evidence can mark a posting open or closed; inconclusive checks remain unknown and increment the consecutive failure count, while a conclusive result resets the count. Re-discovery evidence of an open posting also resets it.
+
 Suggested cadence:
 
 - active recommendations and saved jobs: daily;
@@ -142,7 +148,7 @@ The deterministic prefilter acts as an inexpensive, rule-based qualification gat
    - **Compensation Floor with Tolerance:** Exclude only when compensation is explicitly stated and the upper/provided bound falls completely below the configured floor minus tolerance (e.g., target minimum $120k with 15% tolerance = excludes only below $102k). Roles without listed compensation pass through.
    - **Keyword & Qualification Relevance:** Exclude jobs that match none of the designated title aliases or required core skill keywords (completely different domain), or match explicit negative title keywords.
    - **Excluded Titles & Seniority:** Exclude explicit non-viable titles (e.g., "Intern", "Director", "VP", "Sales Representative", "Unpaid").
-   - **Posting Staleness:** Exclude postings older than a configured age threshold (e.g., posted > 45 or 60 days ago) or where the application deadline has conclusively passed.
+   - **Posting Staleness:** Exclude a posting only when its valid `date_posted` is strictly older than the configured `maxAgeDays` (an integer from 1–365, default 45); a posting exactly at the limit passes. Missing or invalid dates remain eligible as unknown. Record the posting timestamp, evaluation timestamp, and configured threshold as failure evidence in `crawler_data.matched_rules`. Exclude by deadline only when the application deadline has conclusively passed.
    - **Work Authorization & Clearance:** Exclude only when the posting explicitly mandates citizenship, active security clearances, or states "No Sponsorship" when the user's profile requires it.
    - **Company & Agency Exclusion:** Exclude postings from user-blacklisted companies, third-party recruiters, or staffing agencies.
    - **Language Constraints:** Exclude postings where the job text is in an unread language.

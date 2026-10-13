@@ -17,9 +17,11 @@ Suggested reason codes include title, seniority, skills, company, industry, comp
 For each explicit feedback event retain:
 
 - job identity;
-- event type and reason;
-- timestamp;
-- whether the feedback was later retracted or replaced.
+- upvote/downvote, optional reason code, and optional explanation;
+- event timestamp and a versioned snapshot of the recommendation, score, confidence, provider, model, and prompt version shown;
+- retraction timestamp and reason, and a link to the replacement event when replaced.
+
+Only an explicit vote action creates feedback. A job may have at most one active vote; changing the vote appends a new event and retracts/links the previous active event. The owner may retract the active vote without creating a replacement. File and PostgreSQL repositories expose the same chronological history.
 
 Saving, dismissing, applying, and employer outcomes remain separate workflow data. They may become behavioral features later but are not explicit preference votes. Do not treat lack of interaction as a downvote.
 

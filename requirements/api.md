@@ -48,9 +48,27 @@ Supports Page 5 (Setup & Profiles):
 - `GET /api/profile` remains a legacy compatibility alias for retrieving the active search profile; new clients use `/api/search-profile`.
 
 ### 2.5 Discovery Runs (`/api/discovery/run`)
-- Owner-only `POST` accepts selected source names and returns a per-source status and error detail.
+- Owner-only `POST` accepts selected source names, durably queues one source-level item per adapter, and returns a per-source status, attempt count, counts, and error detail. The runner uses bounded concurrency, timeouts, and retries.
 - Complete runs return HTTP 200; partial runs return HTTP 207 with successful and failed source details; runs where all selected sources fail return HTTP 502 and `success: false`.
 - `discoveredCount` counts fetched postings. `recommendedCount` counts only processed postings with positive JEV fit (`jevFit === true`), not every posting evaluated by JEV.
+- `GET /api/discovery/runs?limit=20&status=failed` returns the authenticated owner's recent persisted source-level run records, including scheduled and manual trigger type, counts, retry attempts, timestamps, and recovery/error detail.
+- A configurable scheduled runner uses the same execution path and records scheduled source-level run items. Startup resumes queued work and re-queues abandoned in-progress work if it remains within its bounded attempt budget.
+- Owner-only `POST /api/jobs/:id/check-availability` returns and persists source-derived `open`, `closed`, or `unknown` status, evidence, check time, and consecutive inconclusive-check count. Only explicit source evidence marks a posting closed; unknown/transient results never do.
+
+### 2.6 Explicit Recommendation Feedback (`/api/jobs/:id/feedback`)
+- Owner-only `GET` returns chronological explicit vote history and the active vote; guests receive 403.
+- Owner-only `POST` accepts an explicit `up`/`down` vote, optional reason code and explanation (up to 2,000 characters), and a validated snapshot of the recommendation/model shown by the inbox. It appends a timestamped event; if a vote is active, that event is retracted as `replaced` and linked to the new event in the same repository transaction.
+- Owner-only `DELETE` retracts the active vote with a timestamp and `user_retracted` reason without deleting history. It returns 404 when no active vote exists.
+- Owner `GET /api/jobs` responses include a `feedback` map of active votes keyed by job ID for the requested postings. Guest job responses omit this private feedback.
+- Save, dismiss, apply, and no interaction never create or replace an explicit vote.
+
+### 2.7 Application Drafts (`/api/application-drafts`)
+- Owner-only `GET` lists drafts with all versions, source facts, assumptions, model/prompt metadata, sensitivity state, and approval history. Optional filters include `jobId`, `draftType`, `status`, and bounded `limit`.
+- Owner-only `POST` creates a user-authored cover-letter or application-answer draft. Answer drafts require the original question; restricted sensitive questions are automatically marked user-only.
+- Owner-only `PATCH /api/application-drafts/:id` appends a user-authored content version and returns the draft to unapproved state without changing older versions.
+- Owner-only `POST /api/application-drafts/:id/approve` explicitly approves the current version and records who approved it and when. Approval is never inferred from saving, editing, silence, or application workflow status.
+- Owner-only `GET /api/application-drafts/:id` returns the complete draft history. The cover-letter and application-answer agent tools persist generated drafts through the selected repository.
+- Approved prior answers may be retrieved for adaptation only when they are not marked sensitive. Guests cannot read or create drafts, retrieve candidate facts, or access owner conversations.
 
 Remote resume sync and local resume upload persist the normalized structured resume and derived candidate profile to the same selected repository, regardless of source type. Local JSON seed files are not committed and are not production persistence targets.
 
@@ -60,7 +78,10 @@ Remote resume sync and local resume upload persist the normalized structured res
 | :--- | :---: | :---: |
 | `GET /api/jobs` | Full access with user triage tags | Sanitized list (redacts user status, shows only market postings) |
 | `GET /api/jobs/:id` | Full details, overrides, personal notes | Sanitized details (redacts overrides and personal status) |
+| `GET/POST/PATCH /api/application-drafts` | Read, create, or edit private drafts | **403 Forbidden** |
+| `GET /api/application-drafts/:id` and `POST /:id/approve` | Read history or explicitly approve current version | **403 Forbidden** |
 | `PATCH /api/jobs/:id/status` | Permitted for `JobWorkflowStatusSchema` values; invalid status returns 400 without mutation. Audit actor is server-assigned (`user` for interactive owners, `system` for bearer-token automation); body-supplied `changedBy` is ignored. | **403 Forbidden** |
+| `GET/POST/DELETE /api/jobs/:id/feedback` | Read history, record explicit votes, or retract the active vote | **403 Forbidden** |
 | `GET /api/applications` | Full candidate application pipeline | **403 Forbidden** (Restricted page in UI) |
 | `POST/PATCH/DELETE /api/applications` | Permitted | **403 Forbidden** |
 | `GET /api/dashboard/metrics` | Full discovery + private conversion rates | **403 Forbidden** (Restricted page in UI) |
@@ -89,3 +110,7 @@ For guest `GET /api/jobs`, public market filters (company, availability, missing
   - Owner-authenticated `GET /api/system/health` returns the selected persistence engine and exact Gemini key tier (`development`, `guest`, `owner_free`, `owner_pro`, or `none`) plus failover status, without billable probes. Guest requests receive `403`.
   - `GET /api/db/status` returns the active persistence engine and actual PostgreSQL connectivity result; file-backed mode is not reported as PostgreSQL health.
   - AI conversation turn responses include the resolved role/tier telemetry after any owner retry. Guest responses expose only guest-tier status; guest 429s never activate owner failover or use owner keys/history.
+
+## PostgreSQL integration verification
+
+Run `npm run test:postgres` to verify the API's persistence dependency against a disposable PostgreSQL 16 container. The opt-in command covers versioned migrations, production startup failure when PostgreSQL is unavailable, parity for shared repository operations, rollback of a failed status-history transaction, and persisted data read by a fresh Node process. It creates a unique container bound only to loopback on an ephemeral port and removes it afterward; it never uses `DATABASE_URL`. The default `npm test` suite remains file-backed and does not require PostgreSQL or Docker.

@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-The agent helps the user understand postings and draft application materials. In the MVP it may read approved data from the selected repository and create drafts. PostgreSQL is canonical when configured; file-backed mode supports local development and tests. It may not navigate external forms, upload files, submit applications, send messages, schedule interviews, or claim user approval.
+The agent helps the user understand postings and draft application materials. In the MVP it may read approved data from the selected repository and create unapproved drafts. Drafts, source-fact snapshots, edits, and approval history persist in PostgreSQL when configured and in the file-backed repository for local development and tests. It may not navigate external forms, upload files, submit applications, send messages, schedule interviews, or claim user approval.
 
 ## Compatibility with the learning project
 
@@ -55,6 +55,7 @@ Task context must remain deliberate, inspectable, and bounded to prevent unbound
 - Suggest truthful resume emphasis or wording without inventing experience.
 - Reuse a prior approved answer only after adapting it to the current question and job.
 - Save generated content as an unapproved draft.
+- Draft a response to a non-sensitive application question using approved candidate facts and, when relevant, an adapted approved prior answer.
 - Automatically name conversations: evaluate the initial user intent and context to name the conversation with a descriptive 3-6 word topic title via the `name_conversation` tool.
 
 ## Restricted content
@@ -71,7 +72,7 @@ It may explain such a question and ask the user to answer it directly. Sensitive
 
 ## Tool policy
 
-Initial agent capabilities must be read-only except for saving a local draft. They must cover retrieval of the selected job and analysis, retrieval of approved candidate or resume information, retrieval of approved prior answers when available, and saving an application draft.
+Initial agent capabilities must be read-only except for saving an unapproved application draft. They must cover retrieval of the selected job and analysis, retrieval of approved candidate or resume information, retrieval of approved prior answers when available, and saving an application draft.
 
 The conversational agent must not ingest or overwrite the canonical candidate profile or structured resume. Resume upload/sync and profile editing are explicit owner actions through the Setup API/UI; the agent may only read those repository-backed records when preparing assistance.
 
@@ -84,6 +85,9 @@ Requirements:
 - never expose arbitrary SQL, filesystem, shell, HTTP, or browser tools;
 - treat posting and retrieved document text as data that cannot redefine tool permissions;
 - contain individual tool failures: unhandled errors, entity lookups, or execution faults in a tool must not terminate or crash the agent session. Errors must be captured and returned to the model as structured failure payloads so the agent can self-correct or report the issue cleanly.
+- authorize draft retrieval and persistence as owner-only operations; public guest chat remains stateless and has no candidate-profile, draft, or prior-answer tools.
+- validate source-fact IDs on write against the repository-backed context. Record unsupported areas as assumptions for user review instead of presenting them as verified candidate claims.
+- withhold sensitive application questions and follow-up answers from model requests and conversation history. The user may enter a sensitive answer directly in the private draft editor; such drafts are excluded from prior-answer retrieval.
 
 ## Draft review
 
@@ -95,7 +99,7 @@ Each draft must show:
 - model and prompt version;
 - draft/unapproved state.
 
-Only the user can mark a draft approved or final. Editing a generated draft must preserve enough version history to distinguish generated from user-approved content.
+The user can edit the text, inspect every generated and edited version, and explicitly approve the current version. Editing an approved draft creates a new unapproved user-authored version without erasing the previous approved version. Sensitive user-entered answers are never made available as generic retrieval context.
 
 ## Future browser assistance boundary
 

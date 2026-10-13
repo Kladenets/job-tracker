@@ -36,6 +36,7 @@
   - **Role Overview:** Clean snippet of core responsibilities.
   - **Dismissed & Restore Actions:** Dismissed jobs in the Dismissed tab render with a `Restore` button (`RotateCcw`) to reinstate them back to the active recommendation queue (`job_status = 'discovered'`).
   - **Direct ATS Action:** Large primary button linking directly to verified `job_url_direct`.
+  - **Explicit Recommendation Feedback:** The expanded job card exposes distinct upvote/downvote controls, optional reason and explanation inputs, the current vote/timestamp, and a retraction action. Replacing a vote preserves its event history and the recommendation/model snapshot shown at vote time.
 
 ### 1.3 Fast Triage Actions & Keyboard Ergonomics
 - **Keyboard Shortcuts (Active Queue):**
@@ -46,6 +47,7 @@
   - `Cmd+Z`: Undo last triage action (card springs back into position).
   - `c` or `Cmd+K`: Open AI Assistant dock focused on active job.
 - **Guest Mode Behavior:** In guest sessions, triage mutations (Save/Dismiss) display an informational badge (*"Demo mode: Actions are view-only"*).
+- Saving, dismissing, applying, or not interacting with a card never counts as explicit recommendation feedback. Guests cannot view or mutate owner feedback.
 
 ### 1.4 Background Sync & Ingestion Feedback
 - **Synchronous Sync:** When triggering a source crawl, the sync button shows a loading state without blocking the user.

@@ -59,9 +59,12 @@ Raw, messy web boilerplate is never sent to JEV. Missing attributes (e.g. unknow
 - Core Pre-Defined Tools:
   1. `get_job_details`: Fetches full normalized job profile and requirements by `job_id` or query.
   2. `analyze_qualification_fit`: Produces structured match/gap breakdown citing exact evidence from job text.
-  3. `draft_cover_letter`: Generates tailored, truthful cover letters grounded in candidate skills, with user focus notes.
-  4. `generate_interview_prep`: Produces role-specific technical questions, architecture tradeoffs, and prep topics.
-  5. `search_saved_jobs`: Searches stored database jobs by keyword, company, compensation floor, or workplace type.
+  3. `draft_cover_letter`: Retrieves repository-backed candidate facts and saves a tailored cover letter as an unapproved, versioned draft.
+  4. `draft_application_answer`: Retrieves candidate facts and eligible approved prior answers, then saves non-sensitive application answers as unapproved drafts. Sensitive/legal questions are user-only and are never generated or reused.
+  5. `generate_interview_prep`: Produces role-specific technical questions, architecture tradeoffs, and prep topics.
+  6. `search_saved_jobs`: Searches stored database jobs by keyword, company, compensation floor, or workplace type.
+
+Application-answer and cover-letter drafts retain source-fact snapshots, assumptions, model/prompt versions, user edits, and approval history. Only the owner may edit or approve a draft; no tool submits a form or claims approval.
 
 ### Local Testing & Developer Ergonomics
 - Interactive Terminal REPL (`src/scripts/chat.ts` / `npm run agent:chat`): Allows developers to chat directly in the terminal with live streaming/turns, tool execution feedback, `/history`, and `/exit` commands before a full web UI is built.
@@ -79,8 +82,9 @@ Raw, messy web boilerplate is never sent to JEV. Missing attributes (e.g. unknow
 
 ### Tier 2 (Interactive Agent):
 - Executed on-demand when the user clicks an action in the UI (e.g., "Analyze Fit", "Draft Cover Letter", "Prep Interview").
-- Owner requests are governed by configured daily request/token budgets and provider rate limits. If the owner budget is reached, the user is notified and requests may queue until reset.
-- Public guest chat uses an isolated guest key and does not use the owner's budget. The MVP does not enforce an application-level guest request/token budget; the guest provider's own quota is the limit.
+- Every outbound owner AI request, including each interactive tool-loop step and automated live JEV call, reserves estimated input tokens and one request against the configured combined daily owner budget. `AI_OWNER_DAILY_REQUEST_BUDGET` and `AI_OWNER_DAILY_TOKEN_BUDGET` default to 100 requests and 100,000 tokens, reset at 00:00 UTC, and are enforced before the provider is called. Rejected interactive requests return HTTP 429 with the reset time; live JEV screening falls back to its local classifier when the budget is unavailable.
+- Public guest chat uses an isolated guest key and does not use the owner's budget. The MVP does not enforce an application-level guest request/token budget; the guest provider's own quota is the limit. Guest telemetry is stored separately and never counted toward owner limits.
+- Set `AI_OUTBOUND_ENABLED=false` to disable all outbound Gemini and TypeSafe requests; local fallback behavior remains available.
 
 ---
 
@@ -105,7 +109,7 @@ The analyzer must expose a provider-neutral boundary:
 - **`FitClassifier` Interface**: Abstracts the TypeSafe AI (JEV) client. Allows transparent swapping between the live TypeSafe AI API, a fallback simulated classifier, and local unit test fixtures.
 - **`GenerativeAgent` Interface**: Abstracts Google Gen AI SDK (`@google/genai`) for interactive drafting and chat-based role assistance.
 
-Both providers record latency, model ID, prompt/template version, and usage metadata.
+Both providers persist latency, model ID, prompt/template version, estimated input size, and actual token usage when returned. Usage records contain no prompt or response content. Owner diagnostics expose daily aggregate usage and the outbound-call switch.
 
 ---
 
