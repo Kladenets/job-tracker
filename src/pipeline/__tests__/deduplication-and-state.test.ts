@@ -58,6 +58,54 @@ async function runDeduplicationAndStatePreservationTests() {
     "Unknown workplace data must remain eligible even when unknown is not selected"
   );
 
+  const postingAgeProfile = structuredClone(loadSearchProfile());
+  postingAgeProfile.deterministicFilterRules.postingAge.maxAgeDays = 45;
+  const evaluationTime = new Date("2025-01-01T00:00:00.000Z");
+  const dayInMs = 24 * 60 * 60 * 1000;
+  const exactlyAtAgeLimit = translateRawJobPosting({
+    id: "posting-age-boundary-test",
+    site: "greenhouse",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    date_posted: new Date(evaluationTime.getTime() - 45 * dayInMs).toISOString(),
+    description: "Software Engineer role.",
+  });
+  assert(
+    evaluateDeterministicFilter(exactlyAtAgeLimit, postingAgeProfile, evaluationTime).passed,
+    "A posting exactly at the configured maximum age must remain eligible"
+  );
+
+  const justOverAgeLimit = translateRawJobPosting({
+    id: "posting-age-over-boundary-test",
+    site: "greenhouse",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    date_posted: new Date(evaluationTime.getTime() - 45 * dayInMs - 1).toISOString(),
+    description: "Software Engineer role.",
+  });
+  const staleEvaluation = evaluateDeterministicFilter(justOverAgeLimit, postingAgeProfile, evaluationTime);
+  const staleRule = staleEvaluation.matchedRules.find((rule) => rule.rule_id === "posting_stale");
+  assert(!staleEvaluation.passed && staleRule?.passed === false, "A posting just over the maximum age must be excluded");
+  assert(
+    staleRule?.evidence?.includes("45-day maximum") && staleRule.evidence.includes("2024-11-16T23:59:59.999Z"),
+    "Posting-age exclusion evidence must include the configured maximum and posted date"
+  );
+
+  for (const date_posted of [null, "not-a-date"]) {
+    const unknownDatePosting = translateRawJobPosting({
+      id: `unknown-posting-date-${date_posted ?? "missing"}`,
+      site: "greenhouse",
+      title: "Software Engineer",
+      company: "Allowed Company",
+      date_posted,
+      description: "Software Engineer role.",
+    });
+    assert(
+      evaluateDeterministicFilter(unknownDatePosting, postingAgeProfile, evaluationTime).passed,
+      "Missing or invalid posting dates must remain eligible"
+    );
+  }
+
   const nearbyOnsitePosting = translateRawJobPosting({
     id: "nearby-onsite-test",
     site: "indeed",
@@ -236,6 +284,30 @@ async function runDeduplicationAndStatePreservationTests() {
     );
   }
   console.log("✓ Deterministic filter correctly rejected non-viable jobs with audit evidence");
+
+  const stalePostingProfile = structuredClone(loadSearchProfile());
+  stalePostingProfile.jevScreening.enabled = false;
+  const stalePostingIngest = await ingestRawPostings([{
+    id: "stale-posting-audit-test",
+    site: "greenhouse",
+    title: "Software Engineer",
+    company: "Allowed Company",
+    job_url: "https://example.com/jobs/stale-posting-audit-test",
+    date_posted: "2000-01-01T00:00:00.000Z",
+    description: "Software Engineer role.",
+  }], { customRepo: repo, customProfile: stalePostingProfile });
+  assert(stalePostingIngest.filteredOut === 1, "A stale posting must be filtered during ingestion");
+  const stalePostingRecord = await repo.getById(stalePostingIngest.items[0].id);
+  const persistedAgeEvidence = stalePostingRecord?.crawler_data?.matched_rules?.find(
+    (rule) => rule.rule_id === "posting_stale"
+  );
+  assert(
+    persistedAgeEvidence?.passed === false &&
+      persistedAgeEvidence.evidence?.includes("45-day maximum") &&
+      persistedAgeEvidence.evidence.includes("2000-01-01T00:00:00.000Z"),
+    "Posting-age exclusion evidence must be persisted for audit"
+  );
+  console.log("✓ Posting-age exclusions retain their exact audit evidence");
 
   // 4. User reviews and advances workflow status in the app
   console.log("\n[Test 4] Simulating user workflow updates (advancing to 'saved', then 'reviewing')...");

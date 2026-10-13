@@ -48,7 +48,8 @@ function getCommuteDistanceMiles(location: string, targetZip: string): number | 
  */
 export function evaluateDeterministicFilter(
   posting: UnifiedJobPosting,
-  profile?: SearchProfile
+  profile?: SearchProfile,
+  evaluatedAt: Date = new Date()
 ): DeterministicEvaluation {
   const activeProfile = profile || loadSearchProfile();
   const rules = activeProfile.deterministicFilterRules;
@@ -152,20 +153,16 @@ export function evaluateDeterministicFilter(
 
   // 5. Posting Staleness / Age
   if (posting.date_posted) {
-    try {
-      const postedTime = new Date(posting.date_posted).getTime();
-      const now = Date.now();
-      const ageDays = (now - postedTime) / (1000 * 60 * 60 * 24);
-      if (ageDays > rules.postingAge.maxAgeDays) {
-        matchedRules.push({
-          rule_id: "posting_stale",
-          rule_name: "Posting Exceeds Maximum Age",
-          passed: false,
-          evidence: `Posting age of ${Math.round(ageDays)} days exceeds maximum allowable age of ${rules.postingAge.maxAgeDays} days`,
-        });
-      }
-    } catch {
-      // ignore invalid date parsing
+    const postedTime = new Date(posting.date_posted).getTime();
+    const now = evaluatedAt.getTime();
+    const maxAgeMs = rules.postingAge.maxAgeDays * 24 * 60 * 60 * 1000;
+    if (Number.isFinite(postedTime) && Number.isFinite(now) && now - postedTime > maxAgeMs) {
+      matchedRules.push({
+        rule_id: "posting_stale",
+        rule_name: "Posting Exceeds Maximum Age",
+        passed: false,
+        evidence: `Posting date ${new Date(postedTime).toISOString()} is older than the configured ${rules.postingAge.maxAgeDays}-day maximum (evaluated ${new Date(now).toISOString()})`,
+      });
     }
   }
 

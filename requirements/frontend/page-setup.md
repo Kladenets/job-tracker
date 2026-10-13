@@ -35,7 +35,7 @@
   - Workplace Type Preferences (Remote, Hybrid, Onsite checkboxes); unknown workplace/location data remains eligible rather than being inferred as disallowed.
   - Minimum Annual Salary Expectation, tolerance percentage, and explicit allow-missing-salary option.
   - Hard Excluded Title Keywords and Companies.
-  - Excluded seniority levels and maximum posting age.
+  - Excluded seniority levels and maximum posting age (integer days, 1–365; default 45).
   - Work-authorization preferences: sponsorship required, existing active clearance, whether to exclude citizenship-only roles, and whether to exclude active-clearance roles when the candidate lacks clearance.
   - Candidate skills are edited in Candidate Profile and inform JEV analysis; they are not deterministic hard gates because extracted job technologies may be incomplete.
   - Save button validating and persisting updated search criteria to the selected repository. PostgreSQL `user_profiles` is canonical in PostgreSQL mode; file-backed mode persists locally for development/tests.

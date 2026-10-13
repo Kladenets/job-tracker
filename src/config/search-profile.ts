@@ -35,7 +35,7 @@ export const SearchProfileSchema = z.object({
       allowMissingSalary: z.boolean().default(true),
     }),
     postingAge: z.object({
-      maxAgeDays: z.number().default(45),
+      maxAgeDays: z.number().int().min(1).max(365).default(45),
     }),
     seniority: z.object({
       excludedLevels: z.array(z.string()).default([]),
