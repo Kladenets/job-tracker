@@ -10,7 +10,8 @@ import {
  * Executes python-jobspy via ephemeral child process and returns sanitized, typed job postings.
  */
 export async function runJobSpyScraper(
-  query: Partial<JobSpyQuery> = {}
+  query: Partial<JobSpyQuery> = {},
+  options: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<JobSpyBridgeResult> {
   const pythonPath = process.env.PYTHON_PATH || "python3";
   const scriptPath = path.resolve(process.cwd(), "scripts/jobspy_cli.py");
@@ -50,15 +51,37 @@ export async function runJobSpyScraper(
   return new Promise<JobSpyBridgeResult>((resolve, reject) => {
     let stdoutData = "";
     let stderrData = "";
+    let settled = false;
 
     const proc = spawn(pythonPath, args, {
       env: { ...process.env },
     });
 
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", abort);
+      action();
+    };
+    const abort = () => {
+      proc.kill("SIGKILL");
+      finish(() => reject(
+        options.signal?.reason instanceof Error
+          ? options.signal.reason
+          : new Error("JobSpy scraper aborted")
+      ));
+    };
     const timeout = setTimeout(() => {
       proc.kill("SIGKILL");
-      reject(new Error("JobSpy scraper timed out after 60 seconds"));
-    }, 60000);
+      finish(() => reject(new Error(`JobSpy scraper timed out after ${options.timeoutMs ?? 60_000}ms`)));
+    }, options.timeoutMs ?? 60_000);
+
+    if (options.signal?.aborted) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
 
     proc.stdout.on("data", (data: Buffer | string) => {
       stdoutData += data.toString();
@@ -69,10 +92,10 @@ export async function runJobSpyScraper(
     });
 
     proc.on("close", (code: number | null) => {
-      clearTimeout(timeout);
+      if (settled) return;
 
       if (code !== 0 && !stdoutData.trim()) {
-        return resolve({
+        return finish(() => resolve({
           success: false,
           requested_sites: sites.split(","),
           total_found: 0,
@@ -81,16 +104,16 @@ export async function runJobSpyScraper(
             stderr: stderrData.trim(),
           },
           jobs: [],
-        });
+        }));
       }
 
       try {
         const rawJson = JSON.parse(stdoutData.trim());
         const validated = JobSpyBridgeResultSchema.parse(rawJson);
-        resolve(validated);
+        finish(() => resolve(validated));
       } catch (parseErr: unknown) {
         const message = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        resolve({
+        finish(() => resolve({
           success: false,
           requested_sites: sites.split(","),
           total_found: 0,
@@ -100,13 +123,12 @@ export async function runJobSpyScraper(
             raw_stderr: stderrData.slice(0, 500),
           },
           jobs: [],
-        });
+        }));
       }
     });
 
     proc.on("error", (err: Error) => {
-      clearTimeout(timeout);
-      reject(err);
+      finish(() => reject(err));
     });
   });
 }

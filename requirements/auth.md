@@ -90,8 +90,9 @@ The application must be fully containerized using Docker and orchestratable via 
 - **Runner stage:**
   - Utilizes a minimal, secure Node 24.19.0 base image (`node:24.19.0-alpine` or `node:24.19.0-slim`), matching the repository's `.nvmrc` runtime pin.
   - Installs production-only dependencies with the pinned npm 12.2.x toolchain (`npm ci --omit=dev`).
+  - Includes Python 3, an isolated virtual environment populated from `requirements.txt`, and `scripts/jobspy_cli.py` so the production API can execute its JobSpy bridge.
   - Drops root privileges and executes as a non-privileged system user (`USER node`).
-  - Exposes port `3000` and configures health check instructions (`HEALTHCHECK CMD wget --spider http://localhost:3000/api/health`).
+  - Exposes port `3000` and configures a health check against the public minimal `GET /api/health` endpoint.
 
 ### 2. Multi-Container Orchestration (`docker-compose.yml`)
 The local and host environments must provide a unified composition defining three isolated services:
@@ -119,6 +120,7 @@ The local and host environments must provide a unified composition defining thre
 
 1. A multi-stage `Dockerfile` successfully builds a clean, minimal production container image without build artifacts or dev dependencies.
 2. `docker-compose.yml` provides a unified setup for `app`, `db`, and `tunnel` services with persistent volume mapping.
-3. Unauthenticated requests in production mode lacking Cloudflare Access headers are rejected before executing application logic.
-4. Production requests bearing a valid `Cf-Access-Authenticated-User-Email` matching the configured `ALLOWED_USER_EMAIL` are permitted and audited.
-5. Local development and test commands (`npm test`, `npm run dev`) continue to operate cleanly without requiring active Cloudflare tunnels.
+3. `npm run test:docker` builds the production image, verifies its Python JobSpy runtime, health check, API persistence across app-container recreation, and structured handling of JobSpy execution failure; the smoke test uses only disposable Docker resources.
+4. Unauthenticated requests in production mode lacking Cloudflare Access headers are rejected before executing application logic.
+5. Production requests bearing a valid `Cf-Access-Authenticated-User-Email` matching the configured `ALLOWED_USER_EMAIL` are permitted and audited.
+6. Local development and test commands (`npm test`, `npm run dev`) continue to operate cleanly without requiring active Cloudflare tunnels.

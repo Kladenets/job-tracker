@@ -14,6 +14,7 @@ export class JobSpyAdapter implements SourceAdapter {
     sites?: string[];
     countryCode?: string;
     hoursOld?: number;
+    signal?: AbortSignal;
   }): Promise<RawJobPosting[]> {
     const result = await runJobSpyScraper({
       searchTerm: params.searchTerm || "Software Engineer",
@@ -24,8 +25,13 @@ export class JobSpyAdapter implements SourceAdapter {
       sites: params.sites || ["indeed", "google"],
       countryCode: params.countryCode || "USA",
       hoursOld: params.hoursOld ?? 72,
-    });
+    }, { signal: params.signal });
 
+    if (!result.success && result.jobs.length === 0) {
+      throw new Error(
+        `JobSpy scrape failed: ${Object.values(result.errors).join("; ") || "unknown bridge failure"}`
+      );
+    }
     return result.jobs;
   }
 
