@@ -255,6 +255,12 @@ If crawling and analysis run asynchronously, queued work must survive applicatio
 - Provide a reproducible local database setup and persistent local storage.
 - Apply version-controlled, forward database migrations.
 - Apply required migrations as an explicit, documented startup or upgrade step and fail safely if migration fails.
+- Keep production database files outside the disposable database container layer, on durable storage whose identity remains stable across releases. Use an explicit stable volume name or persistent host path that does not change with the checkout directory or Compose project name. Before deployment, verify that the expected existing storage is attached; fail rather than silently creating a new empty volume. Replacing the app container must not affect database storage, and replacing the database container must reattach the same storage.
+- Before every production release, after candidate checks pass and before changing production containers or schema, create a consistent PostgreSQL backup. Record the release identifier and database version, encrypt the backup, store it outside the VM and its database volume, and verify that the artifact is readable. A persistent volume is not a backup. Define retention and access controls, and verify the restore procedure before go-live and periodically thereafter.
+- In addition to release backups, run scheduled production backups at a documented cadence that meets the database recovery-point objective. Retain them independently from the production VM and volume; a release backup does not protect data written between releases.
+- Treat migrations as a production release gate. Test the candidate migrations against the production PostgreSQL major version both on an empty database and as an upgrade from the previous release's schema, using synthetic or sanitized representative data where migrations transform data. Verify expected data invariants, repeatability, and failure rollback; then test the candidate app image against the migrated database. Block deployment on any failure. The disposable `test:postgres` suite must never target production or a developer's shared database.
+- Prefer migrations compatible with both the current and candidate app versions during rollout. App rollback does not automatically reverse schema or data changes; document a recovery path for each migration, using a tested restore when rollback cannot safely be done with the previous app image.
+- Do not combine routine app releases with PostgreSQL major-version upgrades. Plan, test, back up, and verify restore for a major-version upgrade as a separate operation.
 - Enforce referential integrity and important uniqueness constraints in the database.
 - Use transactions for status changes and other multi-record operations.
 - Use `jsonb` for flexible documents that need to be queried.
@@ -267,7 +273,7 @@ If crawling and analysis run asynchronously, queued work must survive applicatio
   - discovery date (`discovered_at`);
   - frequently queried nullable filter fields (`location`, `workplace_type`, `salary_min`) to optimize filtering and missing-data queries (`WHERE salary_min IS NULL`, etc.);
   - queued-work scheduling and status.
-- Provide documented backup, restore, and machine-readable export procedures.
+- Provide documented backup, restore, and machine-readable export procedures, including a release-time production backup and a tested restore procedure.
 - Default API tests use a fresh temporary file-backed repository and do not require PostgreSQL. They must not mutate developer profile/config files or a shared data store.
 - PostgreSQL migration/repository integration tests are a separate opt-in suite: `npm run test:postgres` creates and removes its own disposable PostgreSQL 16 container and never reads `DATABASE_URL` or a developer's shared database. It covers real migrations and rollback, repository parity, production fail-closed startup, and persistence observed by a fresh process. Default tests remain isolated from PostgreSQL and require no Docker service.
 

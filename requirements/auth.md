@@ -97,7 +97,7 @@ The application must be fully containerized using Docker and orchestratable via 
 ### 2. Multi-Container Orchestration (`docker-compose.yml`)
 The local and host environments must provide a unified composition defining three isolated services:
 - **`app`:** The Node.js Express backend and static frontend server, connected to internal container networking and dependent on database readiness.
-- **`db`:** PostgreSQL 16 instance with data persistence mounted to a host volume (`./data/postgres:/var/lib/postgresql/data`) and port binding restricted strictly to local loopback (`127.0.0.1:5432:5432`).
+- **`db`:** PostgreSQL 16 instance with data mounted on durable storage using an explicitly stable volume name or persistent host path, as specified in [database operational requirements](data.md). Any host port binding must remain restricted to local loopback (`127.0.0.1:5432:5432`).
 - **`tunnel` (Optional production profile):** `cloudflare/cloudflared` container connecting the local application service to the Cloudflare Zero Trust network via token without exposing public IP addresses.
 
 ### 3. Deployment Flexibility
